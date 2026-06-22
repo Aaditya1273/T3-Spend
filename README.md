@@ -1,391 +1,289 @@
-# 🌟 ORBIT
-### Your Autonomous Life Optimization System That Never Sleeps
+# T3 Spend
 
-> **The world's first AI-powered goal achievement platform with transparent, self-correcting intelligence and 24/7 behavioral intervention.**
+**The agentic card. Issue scoped, revocable spending authority from your wallet — any agent plugs one in and pays within your limits.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Powered by Opik](https://img.shields.io/badge/Evaluated%20by-Opik-blue)](https://opik.ai)
-[![Built with n8n](https://img.shields.io/badge/Automated%20with-n8n-red)](https://n8n.io)
+Issue scoped, revocable spending cards from your wallet. Any agent plugs one in and pays within your limits. No keys, no gas, dead the moment you revoke.
 
----
+**Live:**
 
-## 🎉 **STATUS: READY TO LAUNCH** (95% Complete)
+| Surface | URL |
+|---|---|
+| Dashboard (issue + manage cards · a fresh sign-in gets a guided welcome, funding step, and live tour) | https://remit.s0nderlabs.xyz |
+| Docs (the full reference, in-app) | https://remit.s0nderlabs.xyz/docs |
+| Demo merchant (accepts the cards' Visas) | https://shop.s0nderlabs.xyz |
+| API + MCP endpoint | https://remit-api.s0nderlabs.xyz |
+| Source (this repo) | https://github.com/s0nderlabs/remit |
+| Demo video | https://youtu.be/ymRo31OBZ8c |
 
-✅ **Core Platform**: Database, Authentication, API, Frontend - All Working!  
-✅ **AI Agents**: Supervisor, Worker, Optimizer - Configured & Ready  
-✅ **Monitoring**: Opik + Sentry - Tracking Everything  
-⚠️ **Email**: SMTP configured but connection timeout (optional - platform works without it)
-
-**Quick Start**: `python verify_setup.py` → `python -m uvicorn src.main:app --reload`  
-**Full Guide**: See `docs/LAUNCH_READY.md`
+Everything runs on Base mainnet with real USDC; the only simulated leg is the Visa rail (Stripe test-mode Issuing, labeled honestly wherever it appears).
 
 ---
 
-## 🎯 The Problem We Solve
+## The idea
 
-**92% of New Year's resolutions fail by February.** Why? Because traditional goal-setting ignores the complexity of human behavior, lacks real-time intervention, and treats goals in isolation.
+Agents need to spend money. Handing an agent your private key is insane; funding a standalone agent wallet loses your custody and your limits. T3 Spend takes the model the card industry settled on decades ago and applies it to agents:
 
-ORBIT changes everything.
+- **Your wallet is the account.** Funds never leave it until the moment of payment.
+- **The card is a delegation.** A scoped ERC-7710 delegation, signed by your wallet, wrapped in caveats: budget per period, per-transaction max, merchant allowlist, expiry, usage count.
+- **The agent holds the card, not the money.** What the agent gets is an MCP endpoint URL. Behind it, the card can spend only what its terms allow.
+- **Revoke kills it instantly.** Freeze or revoke a card (or its whole sub-card tree) and every payment from it stops, server-side immediately and on-chain underneath.
 
-## ⚡ What Makes ORBIT Revolutionary
-
-### 🤖 **Three-Agent Architecture with Governor Pattern**
-- **Worker Agent**: Generates personalized interventions and daily plans
-- **Supervisor Agent**: Real-time quality control with 5-dimensional evaluation
-- **Optimizer Agent**: Continuous learning and self-improvement
-
-### 📊 **Transparent AI Reliability** 
-See exactly how your AI performs:
-- **Safety Score**: 0.97 (No risky advice)
-- **Relevance Score**: 0.89 (89% of nudges were perfectly timed)
-- **Accuracy Score**: 0.82 (3 hallucinations caught & corrected)
-- **Your Success Rate**: 78% (↑12% from last week)
-
-### 🔄 **24/7 Automated Workflows**
-Powered by n8n automation:
-- Morning orchestration based on sleep, weather, and calendar
-- Real-time intervention monitoring
-- Weekly reflection and strategy optimization
-- Emergency pivot handling when things go wrong
-- Cross-domain goal synchronization
-
----
-
-## 🚀 Core Features
-
-### 🎯 **Multi-Domain Goal Management**
-- **💪 Health & Fitness**: Adaptive workouts, nutrition nudges, sleep optimization
-- **💰 Financial Wellness**: Spending friction, savings automation, bill anticipation
-- **📈 Productivity**: Deep work protection, meeting fatigue detection, task prioritization
-- **📚 Learning & Growth**: Spaced repetition, dead time optimization, skill tracking
-- **🤝 Social & Relationships**: Connection maintenance, community finding, gratitude prompts
-
-### 🛡️ **Friction Injection System™**
-Revolutionary behavioral intervention:
-- **Make bad habits hard**: Shopping alerts, social media blockers, temptation delays
-- **Make good habits easy**: Automated scheduling, context-aware reminders, energy-based adjustments
-
-### 🔮 **Predictive Failure Prevention**
-AI analyzes your patterns to intervene BEFORE you quit:
-- Detects early warning signs (2 missed workouts = 87% quit probability)
-- Automatically adjusts difficulty and expectations
-- Provides targeted motivation and alternative strategies
-
-### 🌐 **Cross-Domain Intelligence**
-Your goals don't exist in isolation:
-- Bad sleep → Lower workout intensity + earlier bedtime nudges
-- Financial stress → Simplified meal planning to reduce decision fatigue
-- New relationship → Rebalanced learning schedule with couple activities
-
----
-
-## 🏗️ Technical Architecture.
-
-```mermaid
-graph TB
-    User[👤 User] --> UI[🖥️ ORBIT Dashboard]
-    UI --> Worker[🤖 Worker Agent<br/>Gemini 1.5 Pro]
-    Worker --> Supervisor[🛡️ Supervisor Agent<br/>Real-time Evaluation]
-    Supervisor --> Opik[📊 Opik Traces<br/>Performance Logging]
-    Opik --> Optimizer[🔧 Optimizer Agent<br/>Continuous Learning]
-    
-    N8N[⚡ n8n Workflows] --> Worker
-    N8N --> APIs[🔌 External APIs<br/>Calendar, Weather, Finance]
-    
-    Optimizer --> Worker
-    Supervisor --> UI
+```
+your wallet (EIP-7702 smart account)
+   └── card  ($25/week, expires Jul 6)          ← root delegation, signed by you
+        ├── agent A plugs it in over MCP
+        └── sub-card ($1/week, one merchant)    ← redelegation, narrower terms
+             └── sub-agent B plugs it in
 ```
 
-### 🔧 **Tech Stack**
-- **AI Models**: Gemini 1.5 Pro, Claude Sonnet
-- **Evaluation**: Opik for transparent AI monitoring
-- **Automation**: n8n for workflow orchestration
-- **Frontend**: React with real-time dashboard
-- **Backend**: Python FastAPI
-- **Integrations**: 20+ services via APIs
+## How a payment actually works
 
----
+1. You sign in to the dashboard (Privy embedded wallet, Google login) and issue a card with terms, set by hand in the composer or drafted from a plain-language request by the Venice-powered NL compiler (the model only names tokens, protocols, and merchants; the server resolves every address from its own verified registry, and you still review and sign the draft).
+2. The dashboard compiles the terms into onchain caveats (delegation-framework enforcers), your wallet signs the delegation in the browser, the server stores it alongside a fresh agent key that holds nothing.
+3. You hand the card URL to any agent (one `claude mcp add`, a Cursor deeplink, a pasted connector URL).
+4. When the agent calls `pay`, the server validates the terms, then redeems the delegation through the 1Shot relayer: gasless, on Base mainnet, settled in USDC from your wallet.
+5. Every charge lands in the card's ledger with memo, fee, and tx hash.
 
-## 📱 User Experience
+The agent never sees a private key, never holds a balance, never needs ETH. The first spend even deploys your wallet's 7702 smart-account code automatically in the same transaction.
 
-### Morning Briefing
-```
-🌅 Good morning, Alex!
+### Attested charge receipts
 
-🎯 Today's Focus: Financial discipline
-⚡ Energy Level: 7/10 (great sleep!)
-✅ Streak: 14 days of consistent progress
+After a `pay` or `execute` confirms, the agent can produce a **cryptographically attested receipt** by calling `attest_charge` (Lane D only). The agent signs `remit:t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key; the server verifies the signature recovers to the card's bound DID and returns the full receipt (agent DID, agent address, charge ID, on-chain tx hash, amount, fee, TEE quote, signature). The attestation is chain-of-custody verifiable off-chain — a third party can check that a specific agent DID authorized a specific on-chain transaction.
 
-📊 ACTIVE GOALS
-💪 Health: Exercise 3x/week (78% complete)
-   Next: Tomorrow 7 AM | AI Insight: You exercise best in mornings ☀️
+Every `pay`/`execute` receipt now includes a `charge_id` field so the agent can reference it in the subsequent `attest_charge` call. The `card` tool's recent charges listing also surfaces the charge ID.
 
-💰 Finance: Save $500/month (82% complete - $410 saved)
-   ⚠️ Alert: Big purchase temptation detected
+## What an agent can do with a card
 
-📚 Learning: Spanish B1 by June (23% complete)
-   📖 15-min lesson ready for your commute
+MCP tools, served over Streamable HTTP. The exact set a card exposes matches its capabilities, so the tool list itself is the permission surface (a pay-only card never sees `execute`; a contract-only card never sees `pay`):
 
-🤖 AI RELIABILITY: 47 interventions this week | 89% helpful
-   Recent self-corrections:
-   • Prevented overspending false alarm
-   • Adjusted workout after detecting fatigue
-```
+| Tool | Lane | Purpose |
+|---|---|---|
+| `card` | all | Live state: remaining budget, terms, expiry, recent charges, sub-cards |
+| `pay` | all | Send USDC on Base within the card's limits; blocks until confirmed on-chain |
+| `paid_fetch` | all | Fetch a URL; on HTTP 402 (x402), pay automatically and return the content |
+| `fiat_pay` | all | Buy over Visa rails (simulated: Stripe test-mode Issuing) against the same budget |
+| `card_credentials` | all | Reveal the card's test-mode virtual Visa (number/expiry/cvc) |
+| `execute` | all | Run scoped contract calls (e.g. approve + swap, stake, mint) atomically; only on cards with contract scope |
+| `issue_subcard` | all | Mint a tighter child card for a sub-agent; pay caps and contract scope must nest inside the parent's |
+| `revoke_subcard` | all | Instantly kill a sub-card (and its descendants), server-side |
+| `issue_card` | Lane D | Create a new DID-bound root card from within the MCP session; the card's on-chain delegate is the agent's T3N address, no server-custodied key |
+| `attest_charge` | Lane D | After `pay`/`execute` confirms, produce a cryptographically attested receipt: the agent signs `remit:t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key, proving chain-of-custody |
 
-### Real-Time Intervention
-```
-🛑 ORBIT INTERVENTION
+Refusals are typed (`over_period_limit`, `merchant_not_allowed`, `price_exceeds_max`, `per_trade_exceeded`, `exceeds_parent_terms`, `target_not_allowed`, `method_not_allowed`, ...) so agents can relay them honestly instead of guessing.
 
-You're about to open Amazon while 90% through your weekly budget.
+**Contract cards.** A card can be scoped to specific contract targets + method selectors instead of (or alongside) a USDC budget. The agent calls `execute` with either `{target, method, args}` (the server ABI-encodes) or `{target, data}` raw calldata for tuple/array/multicall methods like Uniswap `exactInputSingle`. For a call that needs a recipient (e.g. `exactInputSingle`'s `recipient`), the `card` tool surfaces the card's on-chain `account` (the root delegator that holds the USDC and receives any output tokens), so the agent routes a swap's output there itself rather than guessing or asking the user. Targets and selectors outside the card's declared scope are refused before anything reaches the chain, and the on-chain `allowedTargets`/`allowedMethods` enforcers check the same scope again. Method signatures are normalized to their canonical form (`uint` -> `uint256`) so the encoder, the raw-data selector check, and the on-chain enforcer all agree. Safety on contract cards is the target/method allowlist plus `maxUses` and `expiry` (contract calls are not USDC-metered); pair contract scope with a `pay` cap in one composite card when you want both. A contract card can also carry an **allowance token list** (`contract.tokens`: the only tokens it may `approve`, every approval exact-amount pinned on-chain) and a **per-trade ceiling** (`contract.perTradeMax`, capping each USDC approval; v1 enforces the ceiling on USDC legs only). Both narrow subset-only on sub-cards. Calls carry no native ETH value in v1 (the carved leaf caps value at 0 on-chain); payable-with-value is a planned extension.
 
-Before you proceed:
-1. Will you use this item weekly? 
-2. Can you wait 48 hours?
-3. Is this better than your vacation fund goal?
+## Connecting a card to an agent
 
-💡 Alternative: You have $50 left for 5 days. 
-   Here are 3 free alternatives to consider...
+Four lanes. The first two carry a per-card credential directly; the third is OAuth, where the agent never holds the card secret; the fourth is T3N DID auth, where the agent authenticates with its Terminal 3 Network identity.
 
-[Proceed Anyway] [Save for Later] [Find Alternative]
-```
-
----
-
-## 🏆 Why ORBIT Wins
-
-### ✅ **Proven Behavioral Science**
-- Implementation intentions
-- Temptation bundling  
-- Habit stacking
-- Social proof integration
-- Loss aversion mechanics
-
-### ✅ **Production-Ready Architecture**
-- Self-hosted n8n workflows
-- Comprehensive API integrations
-- Real-time evaluation and correction
-- Scalable multi-agent system
-
-### ✅ **Transparent AI**
-- Every decision logged and explained
-- User-facing reliability metrics
-- Self-correction capabilities
-- Continuous improvement loops
-
-### ✅ **Holistic Approach**
-- All life domains integrated
-- Cross-goal optimization
-- Context-aware interventions
-- Personalized difficulty scaling
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.9+
-- Node.js 16+
-- n8n instance (self-hosted or cloud)
-- API keys for integrations
-
-### Installation
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/orbit.git
-cd orbit
+# Lane A: secret in the URL path (works everywhere, treat the URL as a password)
+claude mcp add --transport http remit https://<host>/c/<card-secret>/mcp
 
-# Install dependencies
-pip install -r requirements.txt
-npm install
-
-# Set up environment variables
-cp .env.example .env
-# Add your API keys (Gemini, Opik, n8n, etc.)
-
-# Initialize the database
-python scripts/init_db.py
-
-# Start the services
-docker-compose up -d  # n8n, database
-python main.py        # ORBIT backend
-npm start            # Frontend dashboard
+# Lane B: bearer header
+claude mcp add --transport http remit https://<host>/mcp \
+  --header "Authorization: Bearer <card-secret>"
 ```
 
-### First Run
-1. Open http://localhost:3000
-2. Complete the onboarding wizard
-3. Set your first goal
-4. Watch ORBIT create your personalized plan
-5. See real-time Opik evaluations in action
+Lanes A and B work in Cursor, VS Code, Gemini CLI, Windsurf, claude.ai custom connectors, or any MCP client that speaks Streamable HTTP. Rotate the secret any time from the dashboard; the old URL dies instantly.
 
----
+Per-harness one-liners for Lane A (commands verified against each client, Jun 2026):
 
-## 📊 Demo Scenarios
+```bash
+codex mcp add remit --url https://<host>/c/<card-secret>/mcp
+openclaw mcp add remit --url https://<host>/c/<card-secret>/mcp --transport streamable-http  # flag required: omitting it defaults to SSE
+hermes mcp add remit --url "https://<host>/c/<card-secret>/mcp"
+gemini mcp add -t http remit https://<host>/c/<card-secret>/mcp
+goose session --with-streamable-http-extension "https://<host>/c/<card-secret>/mcp"
+amp mcp add remit https://<host>/c/<card-secret>/mcp
+droid mcp add remit https://<host>/c/<card-secret>/mcp --type http
+```
 
-### 🎬 **Scenario 1: Predictive Intervention**
-User skips 2 workouts → AI detects 87% quit probability → Automatically reduces intensity and sends motivational story → User stays on track
+claude.ai web: Customize → Connectors → Add custom connector → paste the card URL (the dashboard's claude.ai chip opens that dialog prefilled). ChatGPT Developer Mode: create a connector with the card URL as No Authentication, or use Lane C for a real auth story.
 
-### 🎬 **Scenario 2: Cross-Domain Optimization** 
-User sets aggressive savings goal → AI detects impact on social spending → Suggests free community events → Maintains social life while saving money
+**Lane C: OAuth 2.1 (card-picker consent).** Add the bare endpoint with no credential:
 
-### 🎬 **Scenario 3: Self-Correction**
-AI suggests expensive course during savings mode → Supervisor catches error → Automatically pivots to free alternative → Logs correction for user transparency
+```bash
+claude mcp add --transport http remit https://<host>/mcp
+```
 
----
+The client discovers the OAuth lane (RFC 9728 protected-resource metadata on the `401`), registers itself (Dynamic Client Registration), and opens a browser. You sign in with your existing dashboard login and **pick which card to grant**. The agent receives a short-lived, card-scoped, independently revocable access token, never the raw card secret. This is the lane OAuth-only clients such as **ChatGPT** require; it also works in Claude Code, claude.ai, Cursor, VS Code, Codex, Gemini CLI, Goose, opencode, Amp, and Factory Droid. Clients that complete OAuth out-of-band read the authorization code straight off the consent success screen: OpenClaw finishes with `openclaw mcp login remit --code <code>` (it runs no callback listener), and headless Hermes uses its paste-back flow the same way. The server is a self-hosted OAuth authorization server (public clients, PKCE S256, rotating refresh tokens); revoking the card kills every token issued for it.
 
-## 🛣️ Roadmap
+**Lane D: T3N DID authentication (agent-keyless).** Send the agent's `did:t3n` identity as HTTP headers instead of a bearer credential. The agent signs an EIP-191 challenge (`remit:t3n-auth:mcp:<timestamp>`) with its T3N key, proving DID possession:
 
-### Phase 1: Core System ✅
-- [x] Three-agent architecture
-- [x] Opik integration
-- [x] Basic UI dashboard
-- [x] First n8n workflow
+```bash
+# Lane D: T3N headers
+claude mcp add --transport http remit https://<host>/mcp \
+  --header "x-t3n-did: did:t3n:<agent-hex>" \
+  --header "x-t3n-signature: <eip191-sig>" \
+  --header "x-t3n-timestamp: <unix-seconds>"
+```
 
-### Phase 2: Domain Expansion 🚧
-- [ ] All 5 domain modules
-- [ ] Complete n8n workflow suite
-- [ ] Mobile app
-- [ ] Advanced integrations
+The server resolves the DID, verifies the signature, and binds the session to the card whose `t3n_did` matches. Lane D uses the same MCP endpoint as Lanes B/C (`/mcp`) and can coexist with Bearer auth — when both a Bearer token and T3N headers are present, the Bearer credential takes precedence.
 
-### Phase 3: Intelligence 🔮
-- [ ] Predictive failure prevention
-- [ ] Advanced cross-domain optimization
-- [ ] Community features
-- [ ] Enterprise version
+**Issuance-only sessions.** An unbound agent (no card yet linked to its DID) can still authenticate over Lane D. The server creates a transient virtual card that exposes one tool: `issue_card`. The agent calls `issue_card` with a name and terms, and the server issues a DID-bound root card whose on-chain delegate is the agent's T3N address — no server-custodied K_agent key. The agent holds its own key.
 
----
+```bash
+# Example: agent has no card, calls issue_card over Lane D
+# (using the MCP client's call_tool facility)
+```
 
-## 🤝 Contributing
+After issuance, the card is immediately bound to the agent's DID and subsequent Lane D connections access its full tool surface. The `issue_card` tool remains available for creating additional DID-bound cards, alongside the real card's spend tools.
 
-We're building the future of goal achievement! Here's how you can help:
+## Architecture
 
-### 🐛 **Bug Reports**
-Found an issue? [Open an issue](https://github.com/yourusername/orbit/issues) with:
-- Steps to reproduce
-- Expected vs actual behavior
-- Your ORBIT version and OS
+Bun monorepo, three packages:
 
-### 💡 **Feature Requests**
-Have an idea? We'd love to hear it! Check our [feature request template](https://github.com/yourusername/orbit/issues/new?template=feature_request.md).
+```
+packages/
+  engine/     pure core: caveat compiler, issuance, spend, redelegation, revocation
+  server/     Hono: REST API + MCP endpoint + x402 facilitator + demo seller + Stripe webhook
+  dashboard/  Next.js: Privy login, one-screen cockpit (card deck + dossier, light/dark), NL issue modal (client-signed), demo shop
+```
 
-### 🔧 **Development**
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests and ensure they pass
-5. Update documentation
-6. Submit a pull request
+Key pieces:
 
-### 📝 **Documentation**
-Help improve our docs:
-- API documentation
-- User guides
-- Integration tutorials
-- Behavioral science explanations
+- **Caveat compiler** (`engine/src/compiler.ts`): turns human terms (`{"pay": {"period": {"amount": "25", "seconds": 604800}}}`) into delegation-framework enforcer caveats.
+- **NL compiler** (`server/src/venice/`): Venice AI turns a plain-language request into a plan of named entities + numbers; the server resolves every name against its own verified registry (model output can never place an address in a draft) and assembles a `CardTerms` draft for the user to review and sign.
+- **Issuance**: server prepares an unsigned delegation, the user's wallet signs it in the browser (prepare/finalize), so the server never holds the user's key for client-signed cards.
+- **Spend** (`engine/src/spend.ts`): validates terms server-side, then redeems the delegation chain through the 1Shot Public Relayer (which calls `DelegationManager.redeemDelegations` on-chain on your behalf), attaching the user's EIP-7702 authorization on first spend.
+- **Sub-cards**: ERC-7710 redelegations. Caps only narrow. Revoking a parent kills the subtree.
+- **Two payment rails off one delegation**: x402 (real USDC, live) and Stripe Issuing real-time auth (test mode, fiat leg simulated honestly).
+- **MCP server**: stateless Streamable HTTP, identity = the card credential on every request, no sessions.
+- **OAuth lane** (`server/src/oauth/`): a self-hosted OAuth 2.1 authorization server (RFC 9728 + RFC 8414 discovery, RFC 7591 dynamic client registration, PKCE S256, RFC 8707 resource binding, rotating refresh tokens, RFC 7009 revocation). Login and the card-picker consent reuse the existing Privy dashboard session; issued tokens are opaque, card-scoped, hash-stored beside the card secrets, and die when the card is revoked.
 
----
+### Contracts (Base mainnet)
 
-## 📈 Performance & Metrics
+| Contract | Address |
+|---|---|
+| DelegationManager | `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` |
+| Stateless7702 delegator impl | `0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B` |
+| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 
-### 🎯 **User Success Rates**
-- **Goal Completion**: 78% (vs 8% industry average)
-- **Long-term Adherence**: 65% at 6 months
-- **Cross-domain Improvement**: 43% see gains in multiple areas
+## Running it
 
-### 🤖 **AI Reliability**
-- **Safety Score**: 0.97 average
-- **Intervention Accuracy**: 89% helpful rating
-- **Self-correction Rate**: 94% of errors caught automatically
-- **Response Time**: <200ms for real-time interventions
+Requires [bun](https://bun.sh). Real money moves on Base mainnet; use small budgets.
 
-### ⚡ **System Performance**
-- **Uptime**: 99.9% SLA
-- **Workflow Execution**: <5s average
-- **API Response**: <100ms p95
-- **Data Processing**: 1M+ events/day capacity
+```bash
+bun install
+cp .env.example .env                       # then fill in the two required vars:
+# REMIT_MASTER_KEY=<64 hex chars>            encrypts agent keys + card secrets at rest
+# REMIT_ADMIN_TOKEN=<random token>           protects the management API
 
----
+bun dev                                    # server on :4070
+bun run --cwd packages/dashboard dev       # dashboard on :4071
+```
 
-## 🔒 Privacy & Security
+Issue a card from the dashboard (Privy login), or via the admin API:
 
-### 🛡️ **Data Protection**
-- **Local Processing**: Sensitive data stays on your device when possible
-- **Encryption**: AES-256 for data at rest, TLS 1.3 for transit
-- **Minimal Collection**: Only gather what's needed for your goals
-- **User Control**: Export, delete, or modify your data anytime
+```bash
+curl -X POST localhost:4070/api/cards \
+  -H "Authorization: Bearer $REMIT_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"my agent card","terms":{"pay":{"period":{"amount":"5","seconds":604800}}}}'
+# -> { "card_id": ..., "card_url": "http://localhost:4070/c/<secret>/mcp" }
+```
 
-### 🔐 **Security Measures**
-- **API Security**: Rate limiting, authentication, input validation
-- **Infrastructure**: SOC 2 compliant hosting
-- **Monitoring**: 24/7 security monitoring and alerting
-- **Updates**: Automatic security patches
+Plug the `card_url` into an agent and it can spend.
 
-### 📋 **Compliance**
-- GDPR compliant
-- CCPA compliant  
-- HIPAA considerations for health data
-- Regular security audits
+### Tests
 
----
+```bash
+bun test                 # engine + server suites
+bun run typecheck        # per-package tsc
+```
 
-## 🌟 Community & Support
+### Environment variables
 
-### 💬 **Get Help**
-- **Documentation**: [docs.orbit.ai](https://docs.orbit.ai)
-- **Discord**: [Join our community](https://discord.gg/orbit)
-- **Email**: support@orbit.ai
-- **GitHub Issues**: Bug reports and feature requests
+| Var | Required | Purpose |
+|---|---|---|
+| `REMIT_MASTER_KEY` | yes | 32-byte hex key; encrypts agent keys and card secrets at rest |
+| `REMIT_ADMIN_TOKEN` | yes | ops bearer token for the management API (`/api/*`): full access, server-side scripts only, never shipped to a browser |
+| `REMIT_PRIVY_APP_ID` | dashboard lane | enables per-user API auth: Privy access tokens verified offline against the app's JWKS; every route scoped to the authenticated user |
+| `PORT` | no | server port (default 4070) |
+| `REMIT_DB_PATH` | no | SQLite path (default `.dev/remit.sqlite`) |
+| `REMIT_RPC_URL` | no | Base RPC (default `https://mainnet.base.org`) |
+| `REMIT_PUBLIC_MCP_BASE` | prod | public origin used when rendering card URLs (unset = localhost; also arms the MCP Host allowlist) |
+| `REMIT_ALLOWED_HOSTS` | no | extra Host headers accepted on the MCP endpoint (comma-separated; e.g. a platform fallback domain) |
+| `REMIT_CORS_ORIGINS` | no | comma-separated allowed origins for the API |
+| `REMIT_DEV_USER_PK` | no | dev-only server-custodied user key (server-signed issuance lane) |
+| `REMIT_FACILITATOR_BASE` | no | x402 facilitator base URL (defaults to self) |
+| `REMIT_SELLER_PAYTO` | no | payout address for the built-in demo seller |
+| `REMIT_PAID_FETCH_ALLOW_LOCAL` | no | allow `paid_fetch` to hit local/private hosts (dev only) |
+| `REMIT_STRIPE_WEBHOOK_SECRET` | no | Stripe real-time auth webhook signing secret (test mode); unset = the fiat leg answers 503 (disabled) |
+| `STRIPE_SECRET_KEY` | no | Stripe TEST-mode secret key (`sk_test_`/`rk_test_` only; anything else is refused); enables `fiat_pay`, `card_credentials`, and the demo shop |
+| `REMIT_FIAT_SETTLEMENT` | no | `1` = approved Visa charges settle on-chain as real delegated USDC transfers (see `REMIT_SETTLEMENT_ADDRESS`, `REMIT_FIAT_FEE_HEADROOM`, `REMIT_FIAT_SETTLE_INTERVAL_MS`) |
+| `REMIT_SETTLEMENT_ADDRESS` | settlement | recipient of the fiat settlement transfers (validated at boot; default = the fee collector) |
+| `VENICE_API_KEY` | no | enables `POST /cards/compile` (plain-language card drafting); unset = the compile endpoint refuses (disabled) |
+| `VENICE_MODEL` | with key | Venice model id for the NL compiler; pin it (the fallback default is unvalidated) |
+| `VENICE_BASE_URL` | no | Venice API base override (defaults to the public Venice endpoint) |
+| `BASESCAN_API_KEY` | no | enables verified-contract labels from Basescan when resolving compiled drafts |
+| `REMIT_DASHBOARD_BASE` | OAuth lane | dashboard origin that hosts the OAuth consent (card-picker) page (default `http://localhost:4071`) |
+| `REMIT_RECONCILE_INTERVAL_MS` | no | stuck-pending-charge reconcile sweep interval (default 300000; 0 disables) |
+| `REMIT_MCP_RATE_LIMIT` / `REMIT_MCP_BAD_SECRET_LIMIT` | no | per-card and per-IP-bad-secret request ceilings per minute (defaults 240 / 30) |
+| `REMIT_OAUTH_ACCESS_TTL` / `REMIT_OAUTH_REFRESH_TTL` | no | OAuth access / refresh token lifetimes in seconds (defaults 3600 / 2592000) |
+| `REMIT_OAUTH_REDIRECT_HOSTS` | no | if set, restricts OAuth `https` redirect-URI hosts to this allowlist (loopback + custom schemes always allowed; recommended in prod) |
+| `REMIT_OAUTH_ACCEPTED_RESOURCES` | no | extra RFC 8707 resource URIs still honored (legacy values during a base-URL migration) |
+| `REMIT_TRUST_PROXY_HOPS` | no | trusted proxy hops for client-IP rate limiting (default 1 = Railway edge; 0 disables XFF trust) |
+| `NEXT_PUBLIC_PRIVY_APP_ID` / `NEXT_PUBLIC_PRIVY_CLIENT_ID` | dashboard | Privy app credentials (public identifiers, not secrets) |
+| `NEXT_PUBLIC_REMIT_API` | dashboard | server API base, e.g. `http://localhost:4070/api` |
+| `NEXT_PUBLIC_BASE_RPC` | dashboard | Base RPC for client-side reads |
 
-### 🎓 **Learning Resources**
-- **Blog**: [blog.orbit.ai](https://blog.orbit.ai) - Behavioral science insights
-- **YouTube**: Video tutorials and case studies
-- **Webinars**: Monthly deep-dives with the team
-- **Research**: Published papers on AI-assisted goal achievement
+The dashboard carries **no shared secret**: every API call sends the signed-in user's Privy session token, which the server verifies and scopes. The deployed dashboard origin must be listed in the server's `REMIT_CORS_ORIGINS`.
 
-### 🏆 **Recognition**
-- **Hackathon Winner**: Best AI Application 2026
-- **Featured**: TechCrunch, Product Hunt #1
-- **Awards**: Innovation in Behavioral Technology
-- **Research**: 3 peer-reviewed publications
+## Security model
 
----
+- **Custody**: your funds stay in your wallet. The per-card agent key signs redelegations only; it holds no assets and is encrypted at rest. You can export your wallet's private key from the account menu at any time (through Privy's secure modal, rendered in a separate-domain iframe T3 Spend never reads) and walk away to any client.
+- **Dashboard auth**: per-user Privy sessions, verified server-side against the app JWKS. At onboard, the embedded wallet signs `remit-onboard:v1:<did>` to prove key possession bound to that login; from then on, every card route is scoped to the authenticated user's own cards.
+- **Issuance integrity**: the server verifies the delegation signature recovers to the delegator on both issuance lanes before persisting a card.
+- **Card secrets**: 256-bit, stored as a hash for auth and AES-256-GCM-encrypted at rest for the reveal/rotate feature; the URL is a credential, rotate it like a password.
+- **Limits enforced twice**: server-side at call time (typed refusals) and on-chain by caveat enforcers at redemption. Period, lifetime, expiry, usage count, and contract target/method have dedicated on-chain enforcers; the per-transaction max and merchant allowlist are server-side carve policy, backstopped on-chain by the leaf's amount scope.
+- **Revocation layers**: freeze (server, reversible) -> revoke (card + subtree, permanent) -> nuke (on-chain nonce bump, kills every delegation ever issued by the wallet). All three are user-operable from the dashboard; on-chain revoke and nuke are signed by the user's own embedded wallet in the browser (an admin leaf delegation) and ride the relayer gaslessly.
+- **MCP surface hardening**: Host allowlist (DNS-rebinding guard), per-card and bad-secret rate limits, 1 MiB body cap, secrets never echoed in errors or logs.
+- **Stripe leg**: test mode only, by design; the real-time auth webhook answers from cached delegation state within Stripe's 2s window. With settlement enabled, an approved charge settles as a real delegated USDC transfer afterwards (the same enforcers count both rails), and a charge whose settlement cannot land parks `settlement_unconfirmed` and freezes the card rather than ever releasing its budget.
 
-## 📄 License
+## The demo merchant
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+`/shop` (also served at https://shop.s0nderlabs.xyz) is a small storefront, "s0nder supply co.", that accepts the cards' Visas. It exists to show the fiat lane end to end with nothing mocked on our side of the rail:
 
----
+1. An agent asks its card for credentials (`card_credentials`) and fills the checkout form like it would at any web store.
+2. The shop fires a real Stripe test-mode authorization; Stripe calls our real-time auth webhook; the webhook answers approve/decline from the card's on-chain delegation state within Stripe's 2-second window.
+3. A decline (e.g. an item over the card's weekly budget) comes back typed, from the card's terms, not from the merchant.
+4. With settlement enabled, the approved charge settles as a real delegated USDC transfer on Base, through the same enforcers that meter the crypto rail. One budget, two rails.
 
-## 🙏 Acknowledgments
+Catalog prices are all $5 or less because approved purchases move real USDC.
 
-### 🧠 **Behavioral Science Advisors**
-- Dr. BJ Fogg (Stanford Behavior Design Lab)
-- Dr. Katy Milkman (Wharton Behavioral Economics)
-- Dr. Charles Duhigg (Author of "The Power of Habit")
+## Built for the MetaMask Smart Accounts Kit x 1Shot API x Venice AI Dev Cook Off (2026)
 
-### 🤖 **Technical Partners**
-- **Opik**: For transparent AI evaluation
-- **n8n**: For workflow automation
-- **Google**: Gemini AI models
-- **Anthropic**: Claude AI models
+The hard gate (Smart Accounts Kit in the main flow) is the product itself: every card IS a SAK delegation, signed by a Privy-provisioned embedded smart account (Smart Accounts are signer-agnostic), and every spend redeems that delegation on-chain.
 
-### 🌟 **Community Contributors**
-Special thanks to our 200+ contributors who've helped build ORBIT into what it is today.
+| Track | What T3 Spend does |
+|---|---|
+| x402 + ERC-7710 | `paid_fetch` answers HTTP 402 by paying through the card's 7710 delegation; real x402 v2 flows on Base mainnet, USDC settled from the user's wallet |
+| Best Agent experience | One URL is the whole integration: `claude mcp add ... /c/<secret>/mcp` and the agent can spend within terms; typed refusals; OAuth lane for clients that want consent UX |
+| Agent-to-agent coordination | `issue_subcard` redelegates narrower authority to sub-agents (caps only nest downward); `revoke_subcard` and the cascade nuke kill whole subtrees with one signature |
+| Venice AI | The dashboard's issue modal compiles plain language into signed card terms (Venice drafts, a verified registry resolves every address, the user reviews and signs) |
+| 1Shot Relayer | Every redemption rides the 1Shot Public Relayer on Base mainnet, gasless, fees in USDC; the user's 7702 smart-account code deploys via the relayer on first spend |
 
----
+### Code usage (per track)
 
-<div align="center">
+Direct links to the exact code behind each track, following the [MetaMask DevRel submission guideline](https://gist.github.com/AyushBherwani1998/202d654c293724df8340581a511f341b).
 
-### 🚀 Ready to Transform Your Life?
+**Smart Accounts Kit**
 
-**[Get Started Now](https://orbit.ai/signup)** | **[View Demo](https://demo.orbit.ai)** | **[Join Discord](https://discord.gg/orbit)**
+- **Advanced Permissions (ERC-7715): not used.** T3 Spend grants spending authority through programmatic ERC-7710 Delegations, whose caveat set is richer than the 7715 grant catalog allows, so there is no `wallet_requestExecutionPermissions` path. Everything below is ERC-7710.
+- **Delegations, create:** [`issueRootCard`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/issuance.ts#L53) compiles human terms into caveats ([`compileCard`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/compiler.ts#L270)), builds the delegation ([`buildRootDelegation`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/delegations.ts#L93)), and signs it with the user's smart account ([`signWithSmartAccount`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/delegations.ts#L156)).
+- **Delegations, redeem:** [`spend.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/spend.ts#L582) ships the leaf-first `permissionContext` to the relayer, which calls `DelegationManager.redeemDelegations` on-chain.
+- **Redelegation, create:** [`issueSubCard`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/issuance.ts#L225) attenuates the parent's terms (caps only narrow) and builds a child delegation whose authority binds to the parent delegation's hash ([`buildChildDelegation`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/delegations.ts#L110)). This is the agent-to-agent sub-card path.
+- **x402, server:** the ERC-7710 x402 facilitator ([`facilitatorRoutes`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/facilitator/routes.ts#L51): `/supported`, `/verify`, `/settle`) and the demo seller that emits the 402 challenge ([`sellerRoutes`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/seller/routes.ts#L21), [`assetTransferMethod: "erc7710"`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/seller/routes.ts#L34)).
+- **x402, client (ERC-7710 asset transfer method):** [`buildX402Payload`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/x402.ts#L64) carves a payment leaf and encodes the delegation chain into the x402 `permissionContext`; the `erc7710` asset-transfer method is [required here](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/x402.ts#L56).
 
-*ORBIT: Because your goals deserve an AI that never gives up on you.*
+**1Shot API**
 
----
+- Every redemption rides the 1Shot Public Relayer: [`Relayer.send`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/relayer.ts#L135) posts `relayer_send7710Transaction` to `relayer.1shotapi.com` ([endpoint](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/relayer.ts#L60)); the spend call site is [`spend.ts#L582`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/spend.ts#L582).
 
-**Made with ❤️ by the ORBIT Team**
+**Venice AI**
 
-[Website](https://orbit.ai) • [Twitter](https://twitter.com/orbitai) • [LinkedIn](https://linkedin.com/company/orbit-ai) • [YouTube](https://youtube.com/orbitai)
+- The natural-language card compiler calls Venice: [`veniceChat`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/venice/client.ts#L20) (OpenAI-wire `chat/completions`), orchestrated by [`compileIntent`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/venice/compiler.ts#L98), which turns a plain-language request into a plan whose named entities the server resolves against its own verified address registry.
 
-</div>
+Everything in this README, including the mainnet transactions, is reproducible end to end.
