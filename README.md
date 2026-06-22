@@ -8,11 +8,11 @@ Issue scoped, revocable spending cards from your wallet. Any agent plugs one in 
 
 | Surface | URL |
 |---|---|
-| Dashboard (issue + manage cards · a fresh sign-in gets a guided welcome, funding step, and live tour) | https://remit.s0nderlabs.xyz |
-| Docs (the full reference, in-app) | https://remit.s0nderlabs.xyz/docs |
-| Demo merchant (accepts the cards' Visas) | https://shop.s0nderlabs.xyz |
-| API + MCP endpoint | https://remit-api.s0nderlabs.xyz |
-| Source (this repo) | https://github.com/s0nderlabs/remit |
+| Dashboard (issue + manage cards · a fresh sign-in gets a guided welcome, funding step, and live tour) |  |
+| Docs (the full reference, in-app) |  |
+| Demo merchant (accepts the cards' Visas) |  |
+| API + MCP endpoint |  |
+| Source (this repo) |  |
 | Demo video | https://youtu.be/ymRo31OBZ8c |
 
 Everything runs on Base mainnet with real USDC; the only simulated leg is the Visa rail (Stripe test-mode Issuing, labeled honestly wherever it appears).
