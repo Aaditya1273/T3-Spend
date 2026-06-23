@@ -8,6 +8,8 @@
 //   - period windows are FIXED (reset at startDate + k*duration), not rolling,
 // or the server would approve what the chain rejects.
 
+import { mkdirSync } from "fs";
+import { dirname } from "path";
 import { Database } from "bun:sqlite";
 import type { Address, Hex } from "viem";
 import type { CardKind, CardTerms, CompiledCard, WireDelegation } from "./types";
@@ -125,6 +127,10 @@ export class Store {
   readonly db: Database;
 
   constructor(path: string = process.env.T3SPEND_DB_PATH ?? ":memory:") {
+    // Ensure the parent directory exists (safety net for deployment containers)
+    if (path !== ":memory:") {
+      try { mkdirSync(dirname(path), { recursive: true }); } catch {}
+    }
     this.db = new Database(path, { create: true });
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.db.exec("PRAGMA foreign_keys = ON;");

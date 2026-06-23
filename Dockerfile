@@ -18,10 +18,13 @@ COPY . .
 # Install production dependencies
 RUN bun install --production
 
-# Ensure the data directory exists and is writable by the bun user
-# (Set T3SPEND_DB_PATH=/data/t3spend.sqlite in Render env vars
-#  and mount a persistent disk at /data for durable storage)
+# Create a writable data directory for SQLite (no persistent disk required).
+# Mount a Render persistent disk at /data for durable storage across restarts.
 RUN mkdir -p /data && chown bun:bun /data
+
+# Default the database to the writable /data directory.
+# Override with T3SPEND_DB_PATH env var for custom paths or persistent disks.
+ENV T3SPEND_DB_PATH=/data/t3spend.sqlite
 
 # Render sets PORT automatically; fallback to 10000
 EXPOSE 10000
