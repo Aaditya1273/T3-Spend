@@ -126,12 +126,13 @@ export type ChargeRow = {
 export class Store {
   readonly db: Database;
 
-  constructor(path: string = process.env.T3SPEND_DB_PATH ?? ":memory:") {
+  constructor(path?: string) {
+    const dbPath = path ?? (process.env.T3SPEND_DB_PATH?.trim() || ":memory:");
     // Ensure the parent directory exists (safety net for deployment containers)
-    if (path !== ":memory:") {
-      try { mkdirSync(dirname(path), { recursive: true }); } catch {}
+    if (dbPath !== ":memory:") {
+      try { mkdirSync(dirname(dbPath), { recursive: true }); } catch {}
     }
-    this.db = new Database(path, { create: true });
+    this.db = new Database(dbPath, { create: true });
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.db.exec("PRAGMA foreign_keys = ON;");
     this.migrate();
