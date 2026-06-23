@@ -8,7 +8,8 @@
 
 [build]
   command = "next build"
-  publish = ".next"
+  # Repo-relative path: the .next folder is inside packages/dashboard/
+  publish = "packages/dashboard/.next"
 
 # Rewrite all routes to Next.js for SPA-style routing
 [[redirects]]
