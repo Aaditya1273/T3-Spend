@@ -1,0 +1,68 @@
+# T3 Spend — Render Blueprint
+# Deploy the backend server as a Web Service with native Bun runtime.
+# 1. Push this repo to GitHub
+# 2. In Render dashboard: New → Blueprint → connect your repo
+# 3. Set the required environment variables (see envVars section below)
+# 4. Deploy
+
+services:
+  - type: web
+    name: t3spend-server
+    runtime: bun
+    repo: https://github.com/Aaditya1273/T3-Spend  # ← CHANGE THIS to your repo URL
+    buildCommand: bun install --frozen-lockfile
+    startCommand: bun run --cwd packages/server start
+    healthCheckPath: /health
+    autoDeploy: true
+
+    # Persistent disk for SQLite — survives restarts and redeploys.
+    # Without this, the database resets to empty on every deploy.
+    disk:
+      name: t3spend-data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      # ── Required ──────────────────────────────────────────────
+      - key: T3SPEND_MASTER_KEY
+        sync: false                          # set in dashboard UI (secret)
+      - key: T3SPEND_ADMIN_TOKEN
+        sync: false                          # set in dashboard UI (secret)
+      - key: T3SPEND_PRIVY_APP_ID
+        sync: false                          # set in dashboard UI (secret)
+
+      # ── Database path ─────────────────────────────────────────
+      # Points SQLite to the persistent disk so data survives deploys.
+      - key: T3SPEND_DB_PATH
+        value: /data/t3spend.sqlite
+
+      # ── Server ────────────────────────────────────────────────
+      # Render sets PORT automatically; keep 10000 as a fallback.
+      - key: PORT
+        value: "10000"
+
+      # Public origin for card URLs — replace with your actual domain.
+      - key: T3SPEND_PUBLIC_MCP_BASE
+        value: https://your-app.onrender.com   # ← CHANGE THIS to your Render URL
+
+      # RPC — use Sepolia for testing, mainnet for production.
+      - key: T3SPEND_RPC_URL
+        value: https://sepolia.base.org
+
+      # ── Optional (set in dashboard UI) ────────────────────────
+      # VENICE_API_KEY:            # enables NL policy drafting
+      # BASESCAN_API_KEY:          # verified-contract labels in drafts
+      # STRIPE_SECRET_KEY:         # enables fiat payment rail (test-mode only)
+      # T3SPEND_STRIPE_WEBHOOK_SECRET:
+      # T3SPEND_FIAT_SETTLEMENT:
+
+      # ── T3N Agent Auth SDK (Terminal 3) ──────────────────────
+      # T3N_ENABLED: 1
+      # T3N_ENVIRONMENT: testnet
+      # T3N_API_KEY:               # set in dashboard UI (secret)
+      # DID_KEY:                   # set in dashboard UI (secret)
+
+      # ── CORS ──────────────────────────────────────────────────
+      # Allow your dashboard deployment to call the API.
+      - key: T3SPEND_CORS_ORIGINS
+        value: https://your-dashboard.onrender.com  # ← CHANGE THIS
