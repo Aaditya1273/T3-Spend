@@ -1,0 +1,14 @@
+# T3 Spend Dashboard — Netlify deployment (repo root)
+# The Next.js app is inside packages/dashboard/
+
+[build]
+  base = "packages/dashboard"
+  command = "next build"
+  # Repo-relative path: .next lives inside packages/dashboard/
+  publish = "packages/dashboard/.next"
+
+# Rewrite all routes to Next.js for SPA-style routing
+[[redirects]]
+  from = "/*"
+  to = "/200.html"
+  status = 200
