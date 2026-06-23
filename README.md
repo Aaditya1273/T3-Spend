@@ -1,157 +1,188 @@
 # T3 Spend
 
-**The agentic card. Issue scoped, revocable spending authority from your wallet — any agent plugs one in and pays within your limits.**
-
-Issue scoped, revocable spending cards from your wallet. Any agent plugs one in and pays within your limits. No keys, no gas, dead the moment you revoke.
-
-**Live:**
-
-| Surface | URL |
-|---|---|
-| Dashboard (issue + manage cards · a fresh sign-in gets a guided welcome, funding step, and live tour) |  |
-| Docs (the full reference, in-app) |  |
-| Demo merchant (accepts the cards' Visas) |  |
-| API + MCP endpoint |  |
-| Source (this repo) |  |
-| Demo video | https://youtu.be/ymRo31OBZ8c |
-
-Everything runs on Base mainnet with real USDC; the only simulated leg is the Visa rail (Stripe test-mode Issuing, labeled honestly wherever it appears).
+**Enterprise agent identity & authorization infrastructure. Govern every agent action with verifiable identity, scoped delegation, and cryptographically attested audit trails.**
 
 ---
 
-## The idea
+**Live surfaces:**
 
-Agents need to spend money. Handing an agent your private key is insane; funding a standalone agent wallet loses your custody and your limits. T3 Spend takes the model the card industry settled on decades ago and applies it to agents:
+| Surface | URL |
+|---|---|
+| Dashboard (issue + govern agents · guided welcome, funding, live tour) | [remit.s0nderlabs.xyz](https://remit.s0nderlabs.xyz) |
+| Docs (full reference) | [remit.s0nderlabs.xyz/docs](https://remit.s0nderlabs.xyz/docs) |
+| Demo merchant (proves the governance model) | [shop.s0nderlabs.xyz](https://shop.s0nderlabs.xyz) |
+| API + MCP endpoint | [remit-api.s0nderlabs.xyz](https://remit-api.s0nderlabs.xyz) |
+| Source (this repo) | [github.com/s0nderlabs/remit](https://github.com/s0nderlabs/remit) |
+| Demo video | [youtu.be/ymRo31OBZ8c](https://youtu.be/ymRo31OBZ8c) |
 
-- **Your wallet is the account.** Funds never leave it until the moment of payment.
-- **The card is a delegation.** A scoped ERC-7710 delegation, signed by your wallet, wrapped in caveats: budget per period, per-transaction max, merchant allowlist, expiry, usage count.
-- **The agent holds the card, not the money.** What the agent gets is an MCP endpoint URL. Behind it, the card can spend only what its terms allow.
-- **Revoke kills it instantly.** Freeze or revoke a card (or its whole sub-card tree) and every payment from it stops, server-side immediately and on-chain underneath.
+Everything runs on Base mainnet with real USDC. The fiat leg (Stripe test-mode Issuing) is simulated and labeled honestly.
+
+---
+
+## The problem: enterprises cannot govern agent workforces
+
+Every enterprise adopting AI agents faces the same wall:
+
+- **No agent identity.** You cannot prove which agent did what. Agents authenticate as "bearer of a key," not as a verifiable entity with an identity that survives session boundaries.
+- **No scoped authorization.** An agent either has full access to a wallet or no access. There is no middle ground — no per-agent budgets, no per-transaction caps, no time-bound permits.
+- **No auditability.** When an agent acts, there is no cryptographically verifiable record of *which* agent authorized *which* action at *which* time, signed by that agent's unique identity.
+- **No delegation chain.** An agent cannot issue narrower authority to a sub-agent and have that delegation be verifiable end to end.
+- **No policy-as-code.** Authorization is all-or-nothing, not expressed as composable terms (budget per period, contract scoping, merchant allowlists, expiry, usage counts) that both the server and the blockchain enforce.
+
+T3 Spend solves this by applying the model enterprise governance has relied on for decades — **identity, card-based authorization, and audit** — to the AI agent workforce.
 
 ```
-your wallet (EIP-7702 smart account)
-   └── card  ($25/week, expires Jul 6)          ← root delegation, signed by you
-        ├── agent A plugs it in over MCP
-        └── sub-card ($1/week, one merchant)    ← redelegation, narrower terms
-             └── sub-agent B plugs it in
+enterprise wallet (EIP-7702 smart account)
+   └── card ($25/week, expires Jul 6)
+        ├── agent A authenticates over MCP
+        └── sub-card ($1/week, one protocol)
+             └── sub-agent B authenticates
 ```
 
-## How a payment actually works
+Every card IS a governed identity binding: the agent's verifiable DID (`did:t3n`) is cryptographically linked to a scoped ERC-7710 delegation signed by the enterprise wallet. The agent never holds a key capable of moving funds — it holds only an authorization that can be revoked, narrowed, or attested at any time.
 
-1. You sign in to the dashboard (Privy embedded wallet, Google login) and issue a card with terms, set by hand in the composer or drafted from a plain-language request by the Venice-powered NL compiler (the model only names tokens, protocols, and merchants; the server resolves every address from its own verified registry, and you still review and sign the draft).
-2. The dashboard compiles the terms into onchain caveats (delegation-framework enforcers), your wallet signs the delegation in the browser, the server stores it alongside a fresh agent key that holds nothing.
-3. You hand the card URL to any agent (one `claude mcp add`, a Cursor deeplink, a pasted connector URL).
-4. When the agent calls `pay`, the server validates the terms, then redeems the delegation through the 1Shot relayer: gasless, on Base mainnet, settled in USDC from your wallet.
-5. Every charge lands in the card's ledger with memo, fee, and tx hash.
+---
 
-The agent never sees a private key, never holds a balance, never needs ETH. The first spend even deploys your wallet's 7702 smart-account code automatically in the same transaction.
+## Governance primitives
 
-### Attested charge receipts
+T3 Spend is built on three primitives that map directly to enterprise governance requirements:
 
-After a `pay` or `execute` confirms, the agent can produce a **cryptographically attested receipt** by calling `attest_charge` (Lane D only). The agent signs `remit:t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key; the server verifies the signature recovers to the card's bound DID and returns the full receipt (agent DID, agent address, charge ID, on-chain tx hash, amount, fee, TEE quote, signature). The attestation is chain-of-custody verifiable off-chain — a third party can check that a specific agent DID authorized a specific on-chain transaction.
-
-Every `pay`/`execute` receipt now includes a `charge_id` field so the agent can reference it in the subsequent `attest_charge` call. The `card` tool's recent charges listing also surfaces the charge ID.
-
-## What an agent can do with a card
-
-MCP tools, served over Streamable HTTP. The exact set a card exposes matches its capabilities, so the tool list itself is the permission surface (a pay-only card never sees `execute`; a contract-only card never sees `pay`):
-
-| Tool | Lane | Purpose |
+| Primitive | Enterprise requirement | How T3 Spend delivers |
 |---|---|---|
-| `card` | all | Live state: remaining budget, terms, expiry, recent charges, sub-cards |
-| `pay` | all | Send USDC on Base within the card's limits; blocks until confirmed on-chain |
-| `paid_fetch` | all | Fetch a URL; on HTTP 402 (x402), pay automatically and return the content |
-| `fiat_pay` | all | Buy over Visa rails (simulated: Stripe test-mode Issuing) against the same budget |
-| `card_credentials` | all | Reveal the card's test-mode virtual Visa (number/expiry/cvc) |
-| `execute` | all | Run scoped contract calls (e.g. approve + swap, stake, mint) atomically; only on cards with contract scope |
-| `issue_subcard` | all | Mint a tighter child card for a sub-agent; pay caps and contract scope must nest inside the parent's |
-| `revoke_subcard` | all | Instantly kill a sub-card (and its descendants), server-side |
-| `issue_card` | Lane D | Create a new DID-bound root card from within the MCP session; the card's on-chain delegate is the agent's T3N address, no server-custodied key |
-| `attest_charge` | Lane D | After `pay`/`execute` confirms, produce a cryptographically attested receipt: the agent signs `remit:t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key, proving chain-of-custody |
+| **Verifiable agent identity** | Know which agent is acting; agent identity must survive session boundaries and be provable to third parties | Every agent authenticates with a `did:t3n` DID. The server resolves the DID, verifies EIP-191 challenge signatures, and binds the session to a specific authorization. After any action, the agent can produce a cryptographically attested receipt signed by its DID key. |
+| **Scoped, revocable authorization** | Authorizations must carry terms (budget, scope, time) and be revocable independently | Each authorization IS an ERC-7710 delegation wrapped in caveats: budget-per-period, per-transaction cap, contract target/method allowlist, merchant allowlist, expiry, usage count. Revoke any authorization instantly — server-side and on-chain. |
+| **Cryptographic audit trail** | Every agent action must be attributable to a specific agent identity, verifiable off-chain by a third party | After `pay`/`execute`, the agent calls `attest_charge` to sign `t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key. The server returns a receipt (agent DID, agent address, charge ID, tx hash, amount, fee, TEE quote, signature) that any third party can verify. |
 
-Refusals are typed (`over_period_limit`, `merchant_not_allowed`, `price_exceeds_max`, `per_trade_exceeded`, `exceeds_parent_terms`, `target_not_allowed`, `method_not_allowed`, ...) so agents can relay them honestly instead of guessing.
+These primitives form the foundation for **agent workforce governance**: identity-provisioning, policy-as-code authorization, usage metering, audit, and revocation — all the controls an enterprise needs to let agents act autonomously without losing oversight.
 
-**Contract cards.** A card can be scoped to specific contract targets + method selectors instead of (or alongside) a USDC budget. The agent calls `execute` with either `{target, method, args}` (the server ABI-encodes) or `{target, data}` raw calldata for tuple/array/multicall methods like Uniswap `exactInputSingle`. For a call that needs a recipient (e.g. `exactInputSingle`'s `recipient`), the `card` tool surfaces the card's on-chain `account` (the root delegator that holds the USDC and receives any output tokens), so the agent routes a swap's output there itself rather than guessing or asking the user. Targets and selectors outside the card's declared scope are refused before anything reaches the chain, and the on-chain `allowedTargets`/`allowedMethods` enforcers check the same scope again. Method signatures are normalized to their canonical form (`uint` -> `uint256`) so the encoder, the raw-data selector check, and the on-chain enforcer all agree. Safety on contract cards is the target/method allowlist plus `maxUses` and `expiry` (contract calls are not USDC-metered); pair contract scope with a `pay` cap in one composite card when you want both. A contract card can also carry an **allowance token list** (`contract.tokens`: the only tokens it may `approve`, every approval exact-amount pinned on-chain) and a **per-trade ceiling** (`contract.perTradeMax`, capping each USDC approval; v1 enforces the ceiling on USDC legs only). Both narrow subset-only on sub-cards. Calls carry no native ETH value in v1 (the carved leaf caps value at 0 on-chain); payable-with-value is a planned extension.
+---
 
-## Connecting a card to an agent
+## How a governed action works
 
-Four lanes. The first two carry a per-card credential directly; the third is OAuth, where the agent never holds the card secret; the fourth is T3N DID auth, where the agent authenticates with its Terminal 3 Network identity.
+1. **Provision identity.** You sign in to the dashboard (Privy embedded wallet, Google or email) and issue a card — a scoped authorization — with policy terms set by hand in the composer or drafted from plain language by the Venice-powered policy compiler. The model names only entities (tokens, protocols, merchants); addresses are resolved server-side from a verified registry.
+
+2. **Bind policy.** The dashboard compiles the terms into on-chain caveats (delegation-framework enforcers). Your wallet signs the delegation in the browser. The server stores it alongside a fresh agent key that holds nothing — the key can sign sub-delegations but cannot move funds.
+
+3. **Authenticate the agent.** The agent connects using its verifiable DID (`did:t3n`) over MCP, or via a card-specific credential. The server resolves the DID, verifies the agent's identity, and binds the session to the card's authorization.
+
+4. **Act under policy.** When the agent calls `pay`, `execute`, `paid_fetch`, or `fiat_pay`, the server validates every term (budget, expiry, scope, usage count) before redeeming the delegation chain through the 1Shot Public Relayer on Base mainnet — gasless, settled in USDC from your wallet.
+
+5. **Attest.** The agent calls `attest_charge` to produce a cryptographically signed receipt proving which agent DID authorized which on-chain transaction at what time, verifiable by any third party.
+
+The agent never sees a private key, never holds a balance, never needs ETH. Every action is attributable to a specific agent identity, within known policy limits, with a verifiable audit trail.
+
+---
+
+## Governed agent capabilities (MCP tools)
+
+The tool list a card exposes **is** its policy surface. A pay-only card never sees `execute`; a contract-only card never sees `pay`; a no-sub-cards card never sees `issue_subcard`. The policy is self-describing — the agent discovers its permitted actions at connect time.
+
+| Tool | Scope | Governance purpose |
+|---|---|---|
+| `card` | all cards | Query live state: remaining budget, terms, expiry, recent charges, sub-cards, and the card's on-chain `account` |
+| `pay` | pay cards | Send USDC within policy limits; blocks until confirmed on-chain |
+| `paid_fetch` | pay cards | Fetch a URL; on HTTP 402 (x402), pay automatically — governed spend with no agent wallet |
+| `fiat_pay` | pay + Stripe | Buy over Visa rails against the same policy budget |
+| `card_credentials` | pay + Stripe | Reveal the test-mode virtual Visa for merchant checkout |
+| `execute` | contract cards | Run scoped contract calls (approve + swap, stake, mint) atomically within policy scope |
+| `issue_subcard` | sub-cards on | Delegate narrower authority to a sub-agent; policy must nest inside parent's |
+| `revoke_subcard` | sub-cards on | Instantly revoke a sub-card and its descendants |
+| `issue_card` | Lane D only | Self-issue a DID-bound card from an unbound agent session; the card's on-chain delegate is the agent's own T3N address |
+| `attest_charge` | Lane D only | Produce a cryptographically attested receipt proving agent DID → on-chain action |
+
+Refusals are typed (`over_period_limit`, `merchant_not_allowed`, `price_exceeds_max`, `target_not_allowed`, `method_not_allowed`, `per_trade_exceeded`, `exceeds_parent_terms`, `not_your_subcard`, `card_frozen`, ...) so agents can report policy violations honestly instead of guessing.
+
+**Contract cards.** An authorization can be scoped to specific contract targets and method selectors. The agent calls `execute` with `{target, method, args}` (server ABI-encodes) or raw `{target, data}` calldata. Targets and selectors outside policy scope are refused before anything reaches the chain — and the on-chain `AllowedTargets`/`AllowedMethods` enforcers check the same scope again at redemption. A contract card can carry an allowance token list (`contract.tokens`: the only tokens it may `approve`) and a per-trade ceiling (`contract.perTradeMax`). Both narrow subset-only on sub-cards.
+
+---
+
+## Agent identity & authorization lanes
+
+Four lanes, escalating in identity strength. Every lane is governed by the same policy engine — only the authentication mechanism differs.
+
+### Lane A: credentials in the path
+
+The simplest lane: a per-card secret embedded in the URL path. Works everywhere, including credential-free clients like claude.ai web.
 
 ```bash
-# Lane A: secret in the URL path (works everywhere, treat the URL as a password)
 claude mcp add --transport http remit https://<host>/c/<card-secret>/mcp
+```
 
-# Lane B: bearer header
+### Lane B: credentials in the header
+
+The same credential, sent as a Bearer header to the bare endpoint.
+
+```bash
 claude mcp add --transport http remit https://<host>/mcp \
   --header "Authorization: Bearer <card-secret>"
 ```
 
-Lanes A and B work in Cursor, VS Code, Gemini CLI, Windsurf, claude.ai custom connectors, or any MCP client that speaks Streamable HTTP. Rotate the secret any time from the dashboard; the old URL dies instantly.
+Lanes A and B work in Cursor, VS Code, Gemini CLI, Windsurf, claude.ai, or any MCP client. Rotate the secret any time; the old credential dies instantly.
 
-Per-harness one-liners for Lane A (commands verified against each client, Jun 2026):
+### Lane C: OAuth 2.1 (card-picker consent)
 
-```bash
-codex mcp add remit --url https://<host>/c/<card-secret>/mcp
-openclaw mcp add remit --url https://<host>/c/<card-secret>/mcp --transport streamable-http  # flag required: omitting it defaults to SSE
-hermes mcp add remit --url "https://<host>/c/<card-secret>/mcp"
-gemini mcp add -t http remit https://<host>/c/<card-secret>/mcp
-goose session --with-streamable-http-extension "https://<host>/c/<card-secret>/mcp"
-amp mcp add remit https://<host>/c/<card-secret>/mcp
-droid mcp add remit https://<host>/c/<card-secret>/mcp --type http
-```
-
-claude.ai web: Customize → Connectors → Add custom connector → paste the card URL (the dashboard's claude.ai chip opens that dialog prefilled). ChatGPT Developer Mode: create a connector with the card URL as No Authentication, or use Lane C for a real auth story.
-
-**Lane C: OAuth 2.1 (card-picker consent).** Add the bare endpoint with no credential:
+The agent adds the bare endpoint with no credential. The client discovers the OAuth lane (RFC 9728), registers itself (RFC 7591 Dynamic Client Registration), and opens a browser. You sign in with your dashboard login and **pick which authorization to grant**. The agent receives a short-lived, card-scoped, independently revocable access token — never the raw secret.
 
 ```bash
 claude mcp add --transport http remit https://<host>/mcp
 ```
 
-The client discovers the OAuth lane (RFC 9728 protected-resource metadata on the `401`), registers itself (Dynamic Client Registration), and opens a browser. You sign in with your existing dashboard login and **pick which card to grant**. The agent receives a short-lived, card-scoped, independently revocable access token, never the raw card secret. This is the lane OAuth-only clients such as **ChatGPT** require; it also works in Claude Code, claude.ai, Cursor, VS Code, Codex, Gemini CLI, Goose, opencode, Amp, and Factory Droid. Clients that complete OAuth out-of-band read the authorization code straight off the consent success screen: OpenClaw finishes with `openclaw mcp login remit --code <code>` (it runs no callback listener), and headless Hermes uses its paste-back flow the same way. The server is a self-hosted OAuth authorization server (public clients, PKCE S256, rotating refresh tokens); revoking the card kills every token issued for it.
+This is the lane OAuth-only clients such as **ChatGPT** require. Self-hosted authorization server: PKCE S256, rotating refresh tokens, RFC 7009 revocation. Revoking the card kills every token issued for it.
 
-**Lane D: T3N DID authentication (agent-keyless).** Send the agent's `did:t3n` identity as HTTP headers instead of a bearer credential. The agent signs an EIP-191 challenge (`remit:t3n-auth:mcp:<timestamp>`) with its T3N key, proving DID possession:
+### Lane D: T3N DID authentication (verifiable agent identity)
+
+The agent authenticates with its `did:t3n` identity — a **verifiable, cryptographically bound agent identity** that survives session boundaries. The agent signs an EIP-191 challenge with its T3N key, proving DID possession:
 
 ```bash
-# Lane D: T3N headers
+# Lane D: verifiable agent identity over MCP
 claude mcp add --transport http remit https://<host>/mcp \
   --header "x-t3n-did: did:t3n:<agent-hex>" \
   --header "x-t3n-signature: <eip191-sig>" \
   --header "x-t3n-timestamp: <unix-seconds>"
 ```
 
-The server resolves the DID, verifies the signature, and binds the session to the card whose `t3n_did` matches. Lane D uses the same MCP endpoint as Lanes B/C (`/mcp`) and can coexist with Bearer auth — when both a Bearer token and T3N headers are present, the Bearer credential takes precedence.
+The server resolves the DID, verifies the signature, and binds the session to the card whose `t3n_did` matches. After every action, the agent can produce a **cryptographically attested receipt** — the agent signs `t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key, proving chain-of-custody. Any third party can verify the receipt off-chain.
 
-**Issuance-only sessions.** An unbound agent (no card yet linked to its DID) can still authenticate over Lane D. The server creates a transient virtual card that exposes one tool: `issue_card`. The agent calls `issue_card` with a name and terms, and the server issues a DID-bound root card whose on-chain delegate is the agent's T3N address — no server-custodied K_agent key. The agent holds its own key.
+**Issuance-only sessions:** an unbound agent (no card linked to its DID) authenticates over Lane D and receives a transient session exposing one tool: `issue_card`. The agent self-issues a DID-bound card whose on-chain delegate is its own T3N address — no server-custodied key.
 
-```bash
-# Example: agent has no card, calls issue_card over Lane D
-# (using the MCP client's call_tool facility)
-```
+---
 
-After issuance, the card is immediately bound to the agent's DID and subsequent Lane D connections access its full tool surface. The `issue_card` tool remains available for creating additional DID-bound cards, alongside the real card's spend tools.
+## Attested charge receipts
 
-## Architecture
+After a `pay` or `execute` confirms, the agent produces a **cryptographically attested receipt** by calling `attest_charge`. The agent signs `t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key; the server verifies the signature recovers to the card's bound DID and returns:
 
-Bun monorepo, three packages:
+- Agent DID (`did:t3n:<hex>`)
+- Agent address (EVM address of the T3N key)
+- Charge ID
+- On-chain transaction hash
+- Amount + fee
+- TEE quote (when available)
+- Agent's signature over the charge
+
+The receipt is **chain-of-custody verifiable off-chain**: a third party can independently verify that a specific agent DID authorized a specific on-chain transaction, without any additional server state. Every `pay`/`execute` receipt includes a `charge_id` field so the agent can reference it in the subsequent `attest_charge` call.
+
+---
+
+## Policy architecture
+
+Three packages sharing a single policy engine:
 
 ```
 packages/
-  engine/     pure core: caveat compiler, issuance, spend, redelegation, revocation
-  server/     Hono: REST API + MCP endpoint + x402 facilitator + demo seller + Stripe webhook
-  dashboard/  Next.js: Privy login, one-screen cockpit (card deck + dossier, light/dark), NL issue modal (client-signed), demo shop
+  engine/     policy core: caveat compiler, issuance, spend, redelegation, revocation
+  server/     Hono: MCP endpoint + REST API + x402 facilitator + Stripe webhook
+  dashboard/  Next.js: Privy login, one-screen policy cockpit, NL policy compiler, demo shop
 ```
 
 Key pieces:
 
-- **Caveat compiler** (`engine/src/compiler.ts`): turns human terms (`{"pay": {"period": {"amount": "25", "seconds": 604800}}}`) into delegation-framework enforcer caveats.
-- **NL compiler** (`server/src/venice/`): Venice AI turns a plain-language request into a plan of named entities + numbers; the server resolves every name against its own verified registry (model output can never place an address in a draft) and assembles a `CardTerms` draft for the user to review and sign.
-- **Issuance**: server prepares an unsigned delegation, the user's wallet signs it in the browser (prepare/finalize), so the server never holds the user's key for client-signed cards.
-- **Spend** (`engine/src/spend.ts`): validates terms server-side, then redeems the delegation chain through the 1Shot Public Relayer (which calls `DelegationManager.redeemDelegations` on-chain on your behalf), attaching the user's EIP-7702 authorization on first spend.
-- **Sub-cards**: ERC-7710 redelegations. Caps only narrow. Revoking a parent kills the subtree.
-- **Two payment rails off one delegation**: x402 (real USDC, live) and Stripe Issuing real-time auth (test mode, fiat leg simulated honestly).
-- **MCP server**: stateless Streamable HTTP, identity = the card credential on every request, no sessions.
-- **OAuth lane** (`server/src/oauth/`): a self-hosted OAuth 2.1 authorization server (RFC 9728 + RFC 8414 discovery, RFC 7591 dynamic client registration, PKCE S256, RFC 8707 resource binding, rotating refresh tokens, RFC 7009 revocation). Login and the card-picker consent reuse the existing Privy dashboard session; issued tokens are opaque, card-scoped, hash-stored beside the card secrets, and die when the card is revoked.
+- **Policy compiler** (`engine/src/compiler.ts`): turns human terms (`{"pay": {"period": {"amount": "25", "seconds": 604800}}}`) into delegation-framework enforcer caveats — the same policy enforced server-side and on-chain.
+- **NL policy compiler** (`server/src/venice/`): Venice AI turns plain language ("$25/week for Uniswap trading, max $5 per trade") into a named-entity plan; every address is resolved server-side from a verified registry — model output can never place a raw address in a draft.
+- **Identity-provisioned issuance**: the server prepares an unsigned delegation, the user's wallet signs it in the browser (prepare/finalize) — the server never holds the user's key. For Lane D, `issueCardForDID` issues a card whose on-chain delegate is the agent's own T3N address, so the agent holds its own key.
+- **Policy enforcement** (`engine/src/spend.ts`): validates every term server-side, then redeems the delegation chain through the 1Shot Public Relayer (which calls `DelegationManager.redeemDelegations` on-chain), attaching the user's EIP-7702 authorization on first spend.
+- **Sub-card redelegation**: ERC-7710 redelegations. Caps only narrow. Revoking a parent kills the subtree. Sub-cards bound to T3N DIDs inherit attestation and signature verification.
+- **Two enforcement rails off one delegation**: x402 (real USDC, live) and Stripe Issuing real-time auth (test mode, fiat leg simulated honestly). Both metered by the same enforcer caveats.
+- **OAuth authorization server** (`server/src/oauth/`): self-hosted OAuth 2.1 (RFC 9728 + 8414 + 7591 + 8707 + 7009). Login and the card-picker consent reuse the existing Privy dashboard session.
 
 ### Contracts (Base mainnet)
 
@@ -161,6 +192,51 @@ Key pieces:
 | Stateless7702 delegator impl | `0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B` |
 | USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 
+---
+
+## Proving the governance model: the demo merchant
+
+`/shop` (also at [shop.s0nderlabs.xyz](https://shop.s0nderlabs.xyz)) is a storefront, "s0nder supply co.," that exists to prove the governance model end to end with nothing mocked on our side of the rail:
+
+1. An agent authenticates, requests its card credentials (`card_credentials`), and fills the checkout form.
+2. The shop fires a real Stripe test-mode authorization. Stripe calls our real-time auth webhook, which answers approve/decline from the card's on-chain state within Stripe's 2-second window.
+3. A decline (e.g. an item over the card's weekly budget) comes back typed — from the card's policy terms, not from the merchant.
+4. With settlement enabled, the approved charge settles as a real delegated USDC transfer on Base — the same enforcers meter both rails against one policy budget.
+
+Catalog prices are $5 or less because approved purchases move real USDC.
+
+---
+
+## Terminal 3 Bounty Submission (June 2026)
+
+This project is submitted to the **Terminal 3's Bounty Challenge** — the best implementation of the T3N Agent Auth SDK, focusing on completeness, integration depth, and creative agentic solutions.
+
+### What we built
+
+T3 Spend is a full-stack enterprise agent governance platform: issue scoped, revocable authorization from any wallet and let any MCP agent authenticate with verifiable identity and act within policy. The **T3N Agent Auth SDK** is integrated as **Lane D** — a first-class agent identity and authentication lane alongside OAuth and bearer secrets.
+
+| Criterion | How T3 Spend delivers |
+|---|---|
+| **SDK completeness** | Agents authenticate with their `did:t3n` identity via HTTP headers (`x-t3n-did`, `x-t3n-signature`, `x-t3n-timestamp`). The server resolves the DID from Terminal 3's registry and verifies EIP-191 signed challenges. Lane D works on the same `/mcp` endpoint as all other auth lanes. |
+| **Issuance-only entry** | An unbound agent (no card yet linked to its DID) gets a transient virtual card exposing one tool: `issue_card`. The agent self-issues a DID-bound root card whose on-chain delegate is the agent's own T3N address — no server-custodied key. |
+| **Attested charge receipts** | After any `pay` or `execute`, the agent calls `attest_charge` to cryptographically sign `t3n-attest:<chargeId>:<cardId>:<txHash>:<timestamp>` with its T3N key. The server verifies the signature recovers to the card's bound DID and returns the full receipt (agent DID, agent address, charge ID, tx hash, amount, fee, TEE quote, signature). This is chain-of-custody verifiable off-chain. |
+| **Agent-to-agent delegation** | `issue_subcard` redelegates narrower terms to a sub-agent (caps only narrow); `revoke_subcard` kills a subtree. Sub-cards bound to T3N DIDs inherit the same attestation and signature verification. |
+| **Real on-chain action** | Every `pay`/`execute` call validates terms server-side, then redeems the ERC-7710 delegation chain through the 1Shot Public Relayer on Base mainnet — real USDC, no keys exposed to the agent. The action surface plus a demo merchant (`/shop`) and x402 `paid_fetch` show the full governed-agent cycle. |
+| **TEE attestation support** | Agents may present a TEE quote via the `x-t3n-attestation` header during authentication. The server verifies the quote using the T3N SDK's `verifyTdxQuote` and surfaces `tee_verified: true/false` alongside the quote in attested charge receipts — demonstrating hardware-backed agent identity verification alongside Terminal 3's infrastructure. |
+
+### Key code locations
+
+- **T3N DID auth flow (server-side):** [`server/src/mcp/t3n-auth.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/mcp/t3n-auth.ts) — validates `x-t3n-did`, `x-t3n-signature`, `x-t3n-timestamp` headers; resolves DID; verifies EIP-191 challenge signatures.
+- **Issue card for T3N DID (issuance):** [`engine/src/issuance.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/issuance.ts) — `issueCardForDID` and `finalizeSubCardForDID` bind cards to agent DIDs without server-custodied keys.
+- **Attested charge receipts:** [`server/src/mcp/routes.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/mcp/routes.ts) — `attest_charge` handler that verifies agent signatures and returns full receipts.
+- **Virtual card for issuance-only sessions:** [`server/src/mcp/server.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/mcp/server.ts) — transient virtual cards that expose `issue_card` to unbound agents.
+- **Delegation chain + real on-chain action:** [`engine/src/spend.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/spend.ts) — validates terms and redeems through the 1Shot relayer.
+- **Sub-card redelegation:** [`engine/src/delegations.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/delegations.ts) — `buildChildDelegation` narrows caps for agent-to-agent delegation.
+
+Everything in this README is reproducible end to end. T3 Spend is an enterprise agent governance platform: issue verifiable identity, enforce policy as code, and audit every action with cryptographic receipts.
+
+---
+
 ## Running it
 
 Requires [bun](https://bun.sh). Real money moves on Base mainnet; use small budgets.
@@ -168,8 +244,8 @@ Requires [bun](https://bun.sh). Real money moves on Base mainnet; use small budg
 ```bash
 bun install
 cp .env.example .env                       # then fill in the two required vars:
-# REMIT_MASTER_KEY=<64 hex chars>            encrypts agent keys + card secrets at rest
-# REMIT_ADMIN_TOKEN=<random token>           protects the management API
+# T3SPEND_MASTER_KEY=<64 hex chars>         encrypts agent keys + card secrets at rest
+# T3SPEND_ADMIN_TOKEN=<random token>        protects the management API
 
 bun dev                                    # server on :4070
 bun run --cwd packages/dashboard dev       # dashboard on :4071
@@ -179,12 +255,12 @@ Issue a card from the dashboard (Privy login), or via the admin API:
 
 ```bash
 curl -X POST localhost:4070/api/cards \
-  -H "Authorization: Bearer $REMIT_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $T3SPEND_ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"name":"my agent card","terms":{"pay":{"period":{"amount":"5","seconds":604800}}}}'
 # -> { "card_id": ..., "card_url": "http://localhost:4070/c/<secret>/mcp" }
 ```
 
-Plug the `card_url` into an agent and it can spend.
+Plug the `card_url` into an agent and it can act within policy.
 
 ### Tests
 
@@ -197,93 +273,37 @@ bun run typecheck        # per-package tsc
 
 | Var | Required | Purpose |
 |---|---|---|
-| `REMIT_MASTER_KEY` | yes | 32-byte hex key; encrypts agent keys and card secrets at rest |
-| `REMIT_ADMIN_TOKEN` | yes | ops bearer token for the management API (`/api/*`): full access, server-side scripts only, never shipped to a browser |
-| `REMIT_PRIVY_APP_ID` | dashboard lane | enables per-user API auth: Privy access tokens verified offline against the app's JWKS; every route scoped to the authenticated user |
+| `T3SPEND_MASTER_KEY` | yes | 32-byte hex key; encrypts agent keys and card secrets at rest |
+| `T3SPEND_ADMIN_TOKEN` | yes | ops bearer token for the management API (`/api/*`): full access, server-side scripts only, never shipped to a browser |
+| `T3SPEND_PRIVY_APP_ID` | dashboard lane | enables per-user API auth: Privy access tokens verified offline against the app's JWKS; every route scoped to the authenticated user |
 | `PORT` | no | server port (default 4070) |
-| `REMIT_DB_PATH` | no | SQLite path (default `.dev/remit.sqlite`) |
-| `REMIT_RPC_URL` | no | Base RPC (default `https://mainnet.base.org`) |
-| `REMIT_PUBLIC_MCP_BASE` | prod | public origin used when rendering card URLs (unset = localhost; also arms the MCP Host allowlist) |
-| `REMIT_ALLOWED_HOSTS` | no | extra Host headers accepted on the MCP endpoint (comma-separated; e.g. a platform fallback domain) |
-| `REMIT_CORS_ORIGINS` | no | comma-separated allowed origins for the API |
-| `REMIT_DEV_USER_PK` | no | dev-only server-custodied user key (server-signed issuance lane) |
-| `REMIT_FACILITATOR_BASE` | no | x402 facilitator base URL (defaults to self) |
-| `REMIT_SELLER_PAYTO` | no | payout address for the built-in demo seller |
-| `REMIT_PAID_FETCH_ALLOW_LOCAL` | no | allow `paid_fetch` to hit local/private hosts (dev only) |
-| `REMIT_STRIPE_WEBHOOK_SECRET` | no | Stripe real-time auth webhook signing secret (test mode); unset = the fiat leg answers 503 (disabled) |
+| `T3SPEND_DB_PATH` | no | SQLite path (default `.dev/t3spend.sqlite`) |
+| `T3SPEND_RPC_URL` | no | Base RPC (default `https://mainnet.base.org`) |
+| `T3SPEND_PUBLIC_MCP_BASE` | prod | public origin used when rendering card URLs (unset = localhost; also arms the MCP Host allowlist) |
+| `T3SPEND_ALLOWED_HOSTS` | no | extra Host headers accepted on the MCP endpoint (comma-separated; e.g. a platform fallback domain) |
+| `T3SPEND_CORS_ORIGINS` | no | comma-separated allowed origins for the API |
+| `T3SPEND_DEV_USER_PK` | no | dev-only server-custodied user key (server-signed issuance lane) |
+| `T3SPEND_FACILITATOR_BASE` | no | x402 facilitator base URL (defaults to self) |
+| `T3SPEND_SELLER_PAYTO` | no | payout address for the built-in demo seller |
+| `T3SPEND_PAID_FETCH_ALLOW_LOCAL` | no | allow `paid_fetch` to hit local/private hosts (dev only) |
+| `T3SPEND_STRIPE_WEBHOOK_SECRET` | no | Stripe real-time auth webhook signing secret (test mode); unset = the fiat leg answers 503 (disabled) |
 | `STRIPE_SECRET_KEY` | no | Stripe TEST-mode secret key (`sk_test_`/`rk_test_` only; anything else is refused); enables `fiat_pay`, `card_credentials`, and the demo shop |
-| `REMIT_FIAT_SETTLEMENT` | no | `1` = approved Visa charges settle on-chain as real delegated USDC transfers (see `REMIT_SETTLEMENT_ADDRESS`, `REMIT_FIAT_FEE_HEADROOM`, `REMIT_FIAT_SETTLE_INTERVAL_MS`) |
-| `REMIT_SETTLEMENT_ADDRESS` | settlement | recipient of the fiat settlement transfers (validated at boot; default = the fee collector) |
-| `VENICE_API_KEY` | no | enables `POST /cards/compile` (plain-language card drafting); unset = the compile endpoint refuses (disabled) |
-| `VENICE_MODEL` | with key | Venice model id for the NL compiler; pin it (the fallback default is unvalidated) |
+| `T3SPEND_FIAT_SETTLEMENT` | no | `1` = approved Visa charges settle on-chain as real delegated USDC transfers (see `T3SPEND_SETTLEMENT_ADDRESS`, `T3SPEND_FIAT_FEE_HEADROOM`, `T3SPEND_FIAT_SETTLE_INTERVAL_MS`) |
+| `T3SPEND_SETTLEMENT_ADDRESS` | settlement | recipient of the fiat settlement transfers (validated at boot; default = the fee collector) |
+| `VENICE_API_KEY` | no | enables `POST /cards/compile` (plain-language policy drafting); unset = the compile endpoint refuses (disabled) |
+| `VENICE_MODEL` | with key | Venice model id for the NL policy compiler; pin it (the fallback default is unvalidated) |
 | `VENICE_BASE_URL` | no | Venice API base override (defaults to the public Venice endpoint) |
 | `BASESCAN_API_KEY` | no | enables verified-contract labels from Basescan when resolving compiled drafts |
-| `REMIT_DASHBOARD_BASE` | OAuth lane | dashboard origin that hosts the OAuth consent (card-picker) page (default `http://localhost:4071`) |
-| `REMIT_RECONCILE_INTERVAL_MS` | no | stuck-pending-charge reconcile sweep interval (default 300000; 0 disables) |
-| `REMIT_MCP_RATE_LIMIT` / `REMIT_MCP_BAD_SECRET_LIMIT` | no | per-card and per-IP-bad-secret request ceilings per minute (defaults 240 / 30) |
-| `REMIT_OAUTH_ACCESS_TTL` / `REMIT_OAUTH_REFRESH_TTL` | no | OAuth access / refresh token lifetimes in seconds (defaults 3600 / 2592000) |
-| `REMIT_OAUTH_REDIRECT_HOSTS` | no | if set, restricts OAuth `https` redirect-URI hosts to this allowlist (loopback + custom schemes always allowed; recommended in prod) |
-| `REMIT_OAUTH_ACCEPTED_RESOURCES` | no | extra RFC 8707 resource URIs still honored (legacy values during a base-URL migration) |
-| `REMIT_TRUST_PROXY_HOPS` | no | trusted proxy hops for client-IP rate limiting (default 1 = Railway edge; 0 disables XFF trust) |
+| `T3SPEND_DASHBOARD_BASE` | OAuth lane | dashboard origin that hosts the OAuth consent (card-picker) page (default `http://localhost:4071`) |
+| `T3SPEND_RECONCILE_INTERVAL_MS` | no | stuck-pending-charge reconcile sweep interval (default 300000; 0 disables) |
+| `T3SPEND_MCP_RATE_LIMIT` / `T3SPEND_MCP_BAD_SECRET_LIMIT` | no | per-card and per-IP-bad-secret request ceilings per minute (defaults 240 / 30) |
+| `T3SPEND_OAUTH_ACCESS_TTL` / `T3SPEND_OAUTH_REFRESH_TTL` | no | OAuth access / refresh token lifetimes in seconds (defaults 3600 / 2592000) |
+| `T3SPEND_OAUTH_REDIRECT_HOSTS` | no | if set, restricts OAuth `https` redirect-URI hosts to this allowlist (loopback + custom schemes always allowed; recommended in prod) |
+| `T3SPEND_OAUTH_ACCEPTED_RESOURCES` | no | extra RFC 8707 resource URIs still honored (legacy values during a base-URL migration) |
+| `T3SPEND_TRUST_PROXY_HOPS` | no | trusted proxy hops for client-IP rate limiting (default 1 = Railway edge; 0 disables XFF trust) |
 | `NEXT_PUBLIC_PRIVY_APP_ID` / `NEXT_PUBLIC_PRIVY_CLIENT_ID` | dashboard | Privy app credentials (public identifiers, not secrets) |
-| `NEXT_PUBLIC_REMIT_API` | dashboard | server API base, e.g. `http://localhost:4070/api` |
+| `NEXT_PUBLIC_T3SPEND_API` | dashboard | server API base, e.g. `http://localhost:4070/api` |
 | `NEXT_PUBLIC_BASE_RPC` | dashboard | Base RPC for client-side reads |
 
-The dashboard carries **no shared secret**: every API call sends the signed-in user's Privy session token, which the server verifies and scopes. The deployed dashboard origin must be listed in the server's `REMIT_CORS_ORIGINS`.
+The dashboard carries **no shared secret**: every API call sends the signed-in user's Privy session token, which the server verifies and scopes. The deployed dashboard origin must be listed in the server's `T3SPEND_CORS_ORIGINS`.
 
-## Security model
-
-- **Custody**: your funds stay in your wallet. The per-card agent key signs redelegations only; it holds no assets and is encrypted at rest. You can export your wallet's private key from the account menu at any time (through Privy's secure modal, rendered in a separate-domain iframe T3 Spend never reads) and walk away to any client.
-- **Dashboard auth**: per-user Privy sessions, verified server-side against the app JWKS. At onboard, the embedded wallet signs `remit-onboard:v1:<did>` to prove key possession bound to that login; from then on, every card route is scoped to the authenticated user's own cards.
-- **Issuance integrity**: the server verifies the delegation signature recovers to the delegator on both issuance lanes before persisting a card.
-- **Card secrets**: 256-bit, stored as a hash for auth and AES-256-GCM-encrypted at rest for the reveal/rotate feature; the URL is a credential, rotate it like a password.
-- **Limits enforced twice**: server-side at call time (typed refusals) and on-chain by caveat enforcers at redemption. Period, lifetime, expiry, usage count, and contract target/method have dedicated on-chain enforcers; the per-transaction max and merchant allowlist are server-side carve policy, backstopped on-chain by the leaf's amount scope.
-- **Revocation layers**: freeze (server, reversible) -> revoke (card + subtree, permanent) -> nuke (on-chain nonce bump, kills every delegation ever issued by the wallet). All three are user-operable from the dashboard; on-chain revoke and nuke are signed by the user's own embedded wallet in the browser (an admin leaf delegation) and ride the relayer gaslessly.
-- **MCP surface hardening**: Host allowlist (DNS-rebinding guard), per-card and bad-secret rate limits, 1 MiB body cap, secrets never echoed in errors or logs.
-- **Stripe leg**: test mode only, by design; the real-time auth webhook answers from cached delegation state within Stripe's 2s window. With settlement enabled, an approved charge settles as a real delegated USDC transfer afterwards (the same enforcers count both rails), and a charge whose settlement cannot land parks `settlement_unconfirmed` and freezes the card rather than ever releasing its budget.
-
-## The demo merchant
-
-`/shop` (also served at https://shop.s0nderlabs.xyz) is a small storefront, "s0nder supply co.", that accepts the cards' Visas. It exists to show the fiat lane end to end with nothing mocked on our side of the rail:
-
-1. An agent asks its card for credentials (`card_credentials`) and fills the checkout form like it would at any web store.
-2. The shop fires a real Stripe test-mode authorization; Stripe calls our real-time auth webhook; the webhook answers approve/decline from the card's on-chain delegation state within Stripe's 2-second window.
-3. A decline (e.g. an item over the card's weekly budget) comes back typed, from the card's terms, not from the merchant.
-4. With settlement enabled, the approved charge settles as a real delegated USDC transfer on Base, through the same enforcers that meter the crypto rail. One budget, two rails.
-
-Catalog prices are all $5 or less because approved purchases move real USDC.
-
-## Built for the MetaMask Smart Accounts Kit x 1Shot API x Venice AI Dev Cook Off (2026)
-
-The hard gate (Smart Accounts Kit in the main flow) is the product itself: every card IS a SAK delegation, signed by a Privy-provisioned embedded smart account (Smart Accounts are signer-agnostic), and every spend redeems that delegation on-chain.
-
-| Track | What T3 Spend does |
-|---|---|
-| x402 + ERC-7710 | `paid_fetch` answers HTTP 402 by paying through the card's 7710 delegation; real x402 v2 flows on Base mainnet, USDC settled from the user's wallet |
-| Best Agent experience | One URL is the whole integration: `claude mcp add ... /c/<secret>/mcp` and the agent can spend within terms; typed refusals; OAuth lane for clients that want consent UX |
-| Agent-to-agent coordination | `issue_subcard` redelegates narrower authority to sub-agents (caps only nest downward); `revoke_subcard` and the cascade nuke kill whole subtrees with one signature |
-| Venice AI | The dashboard's issue modal compiles plain language into signed card terms (Venice drafts, a verified registry resolves every address, the user reviews and signs) |
-| 1Shot Relayer | Every redemption rides the 1Shot Public Relayer on Base mainnet, gasless, fees in USDC; the user's 7702 smart-account code deploys via the relayer on first spend |
-
-### Code usage (per track)
-
-Direct links to the exact code behind each track, following the [MetaMask DevRel submission guideline](https://gist.github.com/AyushBherwani1998/202d654c293724df8340581a511f341b).
-
-**Smart Accounts Kit**
-
-- **Advanced Permissions (ERC-7715): not used.** T3 Spend grants spending authority through programmatic ERC-7710 Delegations, whose caveat set is richer than the 7715 grant catalog allows, so there is no `wallet_requestExecutionPermissions` path. Everything below is ERC-7710.
-- **Delegations, create:** [`issueRootCard`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/issuance.ts#L53) compiles human terms into caveats ([`compileCard`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/compiler.ts#L270)), builds the delegation ([`buildRootDelegation`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/delegations.ts#L93)), and signs it with the user's smart account ([`signWithSmartAccount`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/delegations.ts#L156)).
-- **Delegations, redeem:** [`spend.ts`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/spend.ts#L582) ships the leaf-first `permissionContext` to the relayer, which calls `DelegationManager.redeemDelegations` on-chain.
-- **Redelegation, create:** [`issueSubCard`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/issuance.ts#L225) attenuates the parent's terms (caps only narrow) and builds a child delegation whose authority binds to the parent delegation's hash ([`buildChildDelegation`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/delegations.ts#L110)). This is the agent-to-agent sub-card path.
-- **x402, server:** the ERC-7710 x402 facilitator ([`facilitatorRoutes`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/facilitator/routes.ts#L51): `/supported`, `/verify`, `/settle`) and the demo seller that emits the 402 challenge ([`sellerRoutes`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/seller/routes.ts#L21), [`assetTransferMethod: "erc7710"`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/seller/routes.ts#L34)).
-- **x402, client (ERC-7710 asset transfer method):** [`buildX402Payload`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/x402.ts#L64) carves a payment leaf and encodes the delegation chain into the x402 `permissionContext`; the `erc7710` asset-transfer method is [required here](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/x402.ts#L56).
-
-**1Shot API**
-
-- Every redemption rides the 1Shot Public Relayer: [`Relayer.send`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/relayer.ts#L135) posts `relayer_send7710Transaction` to `relayer.1shotapi.com` ([endpoint](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/relayer.ts#L60)); the spend call site is [`spend.ts#L582`](https://github.com/s0nderlabs/remit/blob/main/packages/engine/src/spend.ts#L582).
-
-**Venice AI**
-
-- The natural-language card compiler calls Venice: [`veniceChat`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/venice/client.ts#L20) (OpenAI-wire `chat/completions`), orchestrated by [`compileIntent`](https://github.com/s0nderlabs/remit/blob/main/packages/server/src/venice/compiler.ts#L98), which turns a plain-language request into a plan whose named entities the server resolves against its own verified address registry.
-
-Everything in this README, including the mainnet transactions, is reproducible end to end.
