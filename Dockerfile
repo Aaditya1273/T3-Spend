@@ -18,9 +18,10 @@ COPY . .
 # Install production dependencies
 RUN bun install --production
 
-# Create a writable data directory for SQLite (no persistent disk required).
+# Create a writable data directory for SQLite (Render runs the container
+# as a non-root user, so make /data world-writable for compatibility).
 # Mount a Render persistent disk at /data for durable storage across restarts.
-RUN mkdir -p /data && chown bun:bun /data
+RUN mkdir -p /data && chmod 1777 /data
 
 # Default the database to the writable /data directory.
 # Override with T3SPEND_DB_PATH env var for custom paths or persistent disks.
