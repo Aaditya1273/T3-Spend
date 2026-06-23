@@ -1,0 +1,17 @@
+# T3 Spend Dashboard — Netlify deployment
+# Base directory is packages/dashboard (set in Netlify dashboard when connecting repo)
+#
+# Required env vars (set in Netlify dashboard):
+#   NEXT_PUBLIC_PRIVY_APP_ID     from your .env
+#   NEXT_PUBLIC_PRIVY_CLIENT_ID  from your .env
+#   NEXT_PUBLIC_BASE_RPC         optional (defaults to mainnet.base.org)
+
+[build]
+  command = "next build"
+  publish = ".next"
+
+# Rewrite all routes to Next.js for SPA-style routing
+[[redirects]]
+  from = "/*"
+  to = "/200.html"
+  status = 200
