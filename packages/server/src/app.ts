@@ -17,6 +17,18 @@ export function createApp(deps: AppDeps): Hono {
   // OAuth lane storage rides the same sqlite database as the engine store
   const oauth = new OAuthStore(deps.store.db);
 
+  app.get("/", (c) =>
+    c.json({
+      ok: true,
+      service: "T3 Spend",
+      engine: ENGINE_VERSION,
+      docs: "/docs",
+      health: "/health",
+      mcp: "/mcp",
+      api: "/api",
+    }),
+  );
+
   app.get("/health", (c) =>
     c.json({ ok: true, engine: ENGINE_VERSION, host: c.req.header("host") ?? null }),
   );

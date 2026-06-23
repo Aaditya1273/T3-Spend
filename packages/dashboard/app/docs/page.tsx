@@ -417,7 +417,7 @@ export default function DocsPage() {
                   Works everywhere, including credential-free clients like claude.ai web. The URL is the password,
                   treat it like one.
                 </p>
-                <Code code={`claude mcp add --transport http remit \\
+                <Code code={`claude mcp add --transport http t3spend \\
   https://<host>/c/<card-secret>/mcp`} />
               </div>
               <div className="doclane">
@@ -426,7 +426,7 @@ export default function DocsPage() {
                   <span className="lt">Bearer header</span>
                 </div>
                 <p>For clients that send an Authorization header. The bare endpoint, secret in the header.</p>
-                <Code code={`claude mcp add --transport http remit \\
+                <Code code={`claude mcp add --transport http t3spend \\
   https://<host>/mcp \\
   --header "Authorization: Bearer <card-secret>"`} />
               </div>
@@ -441,21 +441,21 @@ export default function DocsPage() {
                   which card to grant. The agent receives a short-lived, card-scoped, independently revocable token,
                   never the raw secret. This is the lane OAuth-only clients such as ChatGPT require. Clients that
                   finish OAuth out of band read the code off the consent screen: OpenClaw completes with{" "}
-                  <code>openclaw mcp login remit --code &lt;code&gt;</code>, and headless Hermes uses the same
+                  <code>openclaw mcp login t3spend --code &lt;code&gt;</code>, and headless Hermes uses the same
                   paste-back.
                 </p>
-                <Code code={`claude mcp add --transport http remit https://<host>/mcp`} />
+                <Code code={`claude mcp add --transport http t3spend https://<host>/mcp`} />
               </div>
             </div>
 
             <h3>Per-harness one-liners (Lane A)</h3>
-            <Code code={`codex     mcp add remit --url https://<host>/c/<secret>/mcp
-openclaw  mcp add remit --url https://<host>/c/<secret>/mcp --transport streamable-http  # flag required: omitting it defaults to SSE
-hermes    mcp add remit --url "https://<host>/c/<secret>/mcp"
-gemini    mcp add -t http remit https://<host>/c/<secret>/mcp
+            <Code code={`codex     mcp add t3spend --url https://<host>/c/<secret>/mcp
+openclaw  mcp add t3spend --url https://<host>/c/<secret>/mcp --transport streamable-http  # flag required: omitting it defaults to SSE
+hermes    mcp add t3spend --url "https://<host>/c/<secret>/mcp"
+gemini    mcp add -t http t3spend https://<host>/c/<secret>/mcp
 goose     session --with-streamable-http-extension "https://<host>/c/<secret>/mcp"
-amp       mcp add remit https://<host>/c/<secret>/mcp
-droid     mcp add remit https://<host>/c/<secret>/mcp --type http`} />
+amp       mcp add t3spend https://<host>/c/<secret>/mcp
+droid     mcp add t3spend https://<host>/c/<secret>/mcp --type http`} />
             <p className="docp">
               Lanes A and B work in Cursor, VS Code, Gemini CLI, Windsurf, claude.ai custom connectors, or any MCP
               client that speaks Streamable HTTP. For claude.ai web, paste the card URL under Customize → Connectors →
@@ -630,7 +630,7 @@ droid     mcp add remit https://<host>/c/<secret>/mcp --type http`} />
               </li>
               <li className="docli">
                 <b>Dashboard auth.</b> Per-user Privy sessions, verified server-side against the app JWKS. At onboard,
-                the embedded wallet signs              <code>remit-onboard:v1:&lt;did&gt;</code> to bind the wallet to that login;
+                the embedded wallet signs              <code>t3spend-onboard:v1:&lt;did&gt;</code> to bind the wallet to that login;
                 every card route is then scoped to the authenticated user&apos;s own cards.
               </li>
               <li className="docli">

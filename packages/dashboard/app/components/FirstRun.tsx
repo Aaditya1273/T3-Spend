@@ -3,7 +3,7 @@
 // First-run onboarding: shown once per wallet while the tree is empty. It
 // replaces the old hard-gated composer ("the modal IS the front door"), which
 // trapped a fresh user who had never seen their address and had no funds yet.
-// Two steps, in-place swaps: (1) what remit is and how to drive it, (2) the
+// Two steps, in-place swaps: (1) what t3 spend is and how to drive it, (2) the
 // wallet address with a LIVE USDC readout that ticks up the moment funding
 // lands. Issuing is free (a signature, no gas), so funding is skippable; the
 // avatar menu carries the same address and balance forever after.
@@ -90,7 +90,7 @@ export function FirstRun({
         className="modal fr"
         role="dialog"
         aria-modal="true"
-        aria-label="Welcome to remit"
+        aria-label="Welcome to T3 Spend"
         initial={{ opacity: 0, y: 26, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 360, damping: 30 } }}
         exit={{ opacity: 0, y: 14, scale: 0.98, transition: { duration: 0.16 } }}
@@ -106,7 +106,7 @@ export function FirstRun({
             >
               <div className="mhead">
                 <div>
-                  <div className="mtitle">Welcome to remit</div>
+                  <div className="mtitle">Welcome to T3 Spend</div>
                   <div className="msub">Authority, lent not given.</div>
                 </div>
               </div>

@@ -3,11 +3,11 @@
 // Privy provider. Config shape verified against @privy-io/react-auth@3.29.2 (the
 // proven Phase-C harness): embeddedWallets.ethereum.createOnLogin 'all-users' +
 // showWalletUIs:false (silent signing; the issuance ceremony is the only sheet, and
-// we keep it silent in v1 per the locked UX). Base mainnet only.
+// we keep it silent in v1 per the locked UX). Base Sepolia (CHAIN_ID 84532).
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { MotionConfig } from "motion/react";
-import { base } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 import { PRIVY_APP_ID, PRIVY_CLIENT_ID } from "@/lib/chain";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -27,8 +27,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           ethereum: { createOnLogin: "all-users" },
           showWalletUIs: false,
         },
-        defaultChain: base,
-        supportedChains: [base],
+        defaultChain: baseSepolia,
+        supportedChains: [baseSepolia],
         appearance: { theme: "light", accentColor: "#1f6feb" },
       }}
     >

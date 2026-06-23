@@ -163,9 +163,12 @@ export function buildMcpServer(deps: AppDeps, card: CardRow, t3nCtx?: T3NAttesta
             throw new EngineError("api", "no signer configured (T3SPEND_DEV_USER_PK)");
           }
           // Use the same userId convention as the test helpers: lowercased dev signer address
-          const userId = deps.userSigner.address.toLowerCase();
-          if (!deps.store.getUser(userId)) {
-            deps.store.upsertUser({ id: userId, address: deps.userSigner.address });
+          const signerAddress = deps.userSigner.address;
+          // Find existing user by address so we reuse their actual id
+          const existingUser = deps.store.getUserByAddress(signerAddress);
+          const userId = existingUser?.id ?? signerAddress.toLowerCase();
+          if (!existingUser) {
+            deps.store.upsertUser({ id: userId, address: signerAddress });
           }
           const result = await issueCardForDID(
             { store: deps.store, userSigner: deps.userSigner, revocationNonceOverride: 0n },
@@ -235,7 +238,7 @@ export function buildMcpServer(deps: AppDeps, card: CardRow, t3nCtx?: T3NAttesta
 
           const receipt = buildAttestedReceipt(
             t3nCtx.agentDid,
-            t3nCtx.agentAddress,
+            t3nCtx.agentAddress.toLowerCase() as Address,
             charge.id,
             card.id,
             charge.tx_hash,

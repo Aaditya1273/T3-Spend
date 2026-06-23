@@ -272,8 +272,8 @@ describe("T3N disabled", () => {
   test("T3N headers are ignored when t3n.enabled=false (falls through to 401 'missing credential')", async () => {
     // Save and clear the env var so a fresh server with no T3SPEND_PUBLIC_MCP_BASE
     // doesn't apply the host allowlist (which would 421 instead of 401)
-    const savedBase = process.env.REMIT_PUBLIC_MCP_BASE;
-    delete process.env.REMIT_PUBLIC_MCP_BASE;
+    const savedBase = process.env.T3SPEND_PUBLIC_MCP_BASE;
+    delete process.env.T3SPEND_PUBLIC_MCP_BASE;
 
     const localStore = new Store(":memory:");
     localStore.upsertUser({ id: "u-disabled", address: user.address });
@@ -590,8 +590,8 @@ describe("MCP issue_card tool", () => {
 
   test("issue_card not available when T3N is disabled", async () => {
     // Create a local server with T3N disabled
-    const savedBase = process.env.REMIT_PUBLIC_MCP_BASE;
-    delete process.env.REMIT_PUBLIC_MCP_BASE;
+    const savedBase = process.env.T3SPEND_PUBLIC_MCP_BASE;
+    delete process.env.T3SPEND_PUBLIC_MCP_BASE;
 
     const localStore = new Store(":memory:");
     localStore.upsertUser({ id: "u-disabled", address: user.address });

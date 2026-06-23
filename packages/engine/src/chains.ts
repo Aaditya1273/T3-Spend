@@ -24,7 +24,7 @@ export const CHAINS = {
 } as const;
 
 export type ChainId = keyof typeof CHAINS;
-export const CHAIN_ID: ChainId = 8453;
+export const CHAIN_ID: ChainId = 84532;
 
 // Shared across both chains (verified identical).
 export const FEE_COLLECTOR = "0xE936e8FAf4A5655469182A49a505055B71C17604" as Address;

@@ -3,13 +3,13 @@
 // (8453) is THE chain (locked). Defaults match the live "remit" Privy app.
 
 import { createPublicClient, http, type Address } from "viem";
-import { base } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "cmq14zjut00040cjv4fgj82vd";
 export const PRIVY_CLIENT_ID =
   process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID ?? "client-WY6aErb7JSTTnL52yVH5tufA1xn1nLNvN1oBwKrNMEyfF";
 
-export const CHAIN_ID = 8453 as const;
+export const CHAIN_ID = 84532 as const;
 export const BASE_RPC = process.env.NEXT_PUBLIC_BASE_RPC ?? "https://mainnet.base.org";
 
 // DelegationManager (same on Base + Base Sepolia), verified Jun 5 2026.
@@ -23,4 +23,4 @@ export const USDC_BASE = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" as Address
 // so the wallet block reads it back to show the swapped asset.
 export const WETH_BASE = "0x4200000000000000000000000000000000000006" as Address;
 
-export const publicClient = createPublicClient({ chain: base, transport: http(BASE_RPC) });
+export const publicClient = createPublicClient({ chain: baseSepolia, transport: http(BASE_RPC) });
