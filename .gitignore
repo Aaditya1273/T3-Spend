@@ -32,3 +32,6 @@ PLAN.md
 packages/*/scripts/*.workflow.js
 .claude/reviews/
 .claude/agents/sub-agent.md
+CHANGELOG.md
+hkthon.md
+railway.json
