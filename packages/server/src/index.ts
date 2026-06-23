@@ -33,6 +33,6 @@ if (reconcileMs > 0) {
 
 
 
-console.log(`T3 Spend server listening on :${port}`);
+Bun.serve({ port, fetch: app.fetch, idleTimeout: 120 });
 
-export default { port, fetch: app.fetch, idleTimeout: 120 };
+console.log(`T3 Spend server listening on :${port}`);
