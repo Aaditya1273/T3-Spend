@@ -1,0 +1,17 @@
+node_modules
+packages/*/node_modules
+dist
+.next
+.vercel
+.git
+.gitignore
+.env
+.env.*
+*.local
+*.sqlite
+*.sqlite-*
+.DS_Store
+.md
+tmp
+.dev
+*.tsbuildinfo
