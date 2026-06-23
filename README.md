@@ -4,16 +4,6 @@
 
 ---
 
-**Live surfaces:**
-
-| Surface | URL |
-|---|---|
-| Dashboard (issue + govern agents · guided welcome, funding, live tour) | [remit.s0nderlabs.xyz](https://remit.s0nderlabs.xyz) |
-| Docs (full reference) | [remit.s0nderlabs.xyz/docs](https://remit.s0nderlabs.xyz/docs) |
-| Demo merchant (proves the governance model) | [shop.s0nderlabs.xyz](https://shop.s0nderlabs.xyz) |
-| API + MCP endpoint | [remit-api.s0nderlabs.xyz](https://remit-api.s0nderlabs.xyz) |
-| Source (this repo) | [github.com/s0nderlabs/remit](https://github.com/s0nderlabs/remit) |
-| Demo video | [youtu.be/ymRo31OBZ8c](https://youtu.be/ymRo31OBZ8c) |
 
 Everything runs on Base mainnet with real USDC. The fiat leg (Stripe test-mode Issuing) is simulated and labeled honestly.
 
@@ -186,11 +176,14 @@ Key pieces:
 
 ### Contracts (Base mainnet)
 
-| Contract | Address |
-|---|---|
-| DelegationManager | `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` |
-| Stateless7702 delegator impl | `0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B` |
-| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Contract | Address | Chain |
+|---|---|---|
+| DelegationManager | `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` | Both (shared) |
+| Stateless7702 delegator impl | `0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B` | Both (shared) |
+| LOGICAL_OR_WRAPPER | `0xE1302607a3251AF54c3a6e69318d6aa07F5eB46c` | Both (shared) |
+| FEE_COLLECTOR | `0xE936e8FAf4A5655469182A49a505055B71C17604` | Both (shared EOA) |
+| USDC | Mainnet: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`<br>Sepolia: `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | Base |
+| 1Shot target | Mainnet: `0x26a529124f0bbf9af9d8f9f84a43efe47cf1199a`<br>Sepolia: `0xf1ef956eff4181Ce913b664713515996858B9Ca9` | Base (managed by 1Shot) |
 
 ---
 
@@ -239,13 +232,15 @@ Everything in this README is reproducible end to end. T3 Spend is an enterprise 
 
 ## Running it
 
-Requires [bun](https://bun.sh). Real money moves on Base mainnet; use small budgets.
+Requires [bun](https://bun.sh). Runs on Base Sepolia by default (CHAIN_ID 84532).
 
 ```bash
 bun install
-cp .env.example .env                       # then fill in the two required vars:
+cp .env.example .env                       # then fill in required vars:
 # T3SPEND_MASTER_KEY=<64 hex chars>         encrypts agent keys + card secrets at rest
 # T3SPEND_ADMIN_TOKEN=<random token>        protects the management API
+# VENICE_API_KEY=<key>                      enables NL policy drafting (optional)
+# T3N_ENABLED=1                            enables T3N DID auth lane (optional)
 
 bun dev                                    # server on :4070
 bun run --cwd packages/dashboard dev       # dashboard on :4071
@@ -293,6 +288,10 @@ bun run typecheck        # per-package tsc
 | `VENICE_API_KEY` | no | enables `POST /cards/compile` (plain-language policy drafting); unset = the compile endpoint refuses (disabled) |
 | `VENICE_MODEL` | with key | Venice model id for the NL policy compiler; pin it (the fallback default is unvalidated) |
 | `VENICE_BASE_URL` | no | Venice API base override (defaults to the public Venice endpoint) |
+| `T3N_ENABLED` | no | `1` = enable T3N DID auth lane (Lane D); unset = T3N disabled |
+| `T3N_ENVIRONMENT` | with key | T3N network: `testnet` (default) or `production` |
+| `T3N_API_KEY` | no | T3N developer private key from the claim page; used for T3nClient authentication |
+| `DID_KEY` | no | Tenant DID (`did:t3n:...`) from the authenticated T3N session |
 | `BASESCAN_API_KEY` | no | enables verified-contract labels from Basescan when resolving compiled drafts |
 | `T3SPEND_DASHBOARD_BASE` | OAuth lane | dashboard origin that hosts the OAuth consent (card-picker) page (default `http://localhost:4071`) |
 | `T3SPEND_RECONCILE_INTERVAL_MS` | no | stuck-pending-charge reconcile sweep interval (default 300000; 0 disables) |
@@ -306,4 +305,8 @@ bun run typecheck        # per-package tsc
 | `NEXT_PUBLIC_BASE_RPC` | dashboard | Base RPC for client-side reads |
 
 The dashboard carries **no shared secret**: every API call sends the signed-in user's Privy session token, which the server verifies and scopes. The deployed dashboard origin must be listed in the server's `T3SPEND_CORS_ORIGINS`.
+
+### T3N SDK initialization
+
+The T3N SDK (`@terminal3/t3n-sdk`) is initialized at server boot when `T3N_ENABLED=1`. It loads the WASM crypto component and exposes key derivation (`eth_get_address`) and TEE quote verification (`verifyTdxQuote`). The SDK is configured for the `testnet` environment by default. The SDK is NOT required for Lane D auth — signature verification uses `viem.recoverMessageAddress` against locally stored DID bindings. See the 21-test T3N integration suite at `packages/server/test/t3n.test.ts`.
 
