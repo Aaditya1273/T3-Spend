@@ -52,8 +52,12 @@ export async function realDeps(): Promise<AppDeps> {
 
   // Initialize the T3N SDK at boot if enabled
   if (process.env.T3N_ENABLED === "1") {
-    const env = (process.env.T3N_ENVIRONMENT as string) ?? "testnet";
-    await initT3NSDK(env);
+    try {
+      const env = (process.env.T3N_ENVIRONMENT as string) ?? "testnet";
+      await initT3NSDK(env);
+    } catch (e) {
+      console.warn("[t3n] SDK init failed (non-fatal):", String(e));
+    }
     const t3nConfig = t3nConfigFromEnv();
     if (t3nConfig.initError) {
       console.warn("[t3n] SDK initialization warning — Lane D may not work:", t3nConfig.initError);

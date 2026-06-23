@@ -8,6 +8,15 @@ import { reconcilePending } from "@t3spend/engine";
 import { createApp } from "./app";
 import { envInt, realDeps } from "./deps";
 
+// Catch background Worker crashes from bytecodealliance shims (Bun compat)
+// without killing the server. Log and continue.
+process.on("uncaughtException", (err) => {
+  console.error("[uncaught] non-fatal:", err.message);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("[unhandled] non-fatal:", String(err));
+});
+
 const deps = await realDeps();
 const app = createApp(deps);
 const port = envInt("PORT", 4070);
