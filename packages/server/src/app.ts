@@ -33,13 +33,17 @@ export function createApp(deps: AppDeps): Hono {
     c.json({ ok: true, engine: ENGINE_VERSION, host: c.req.header("host") ?? null }),
   );
 
-  // dashboard API is browser-consumed (dev: localhost:4071; prod: the Vercel origin)
+  // dashboard API is browser-consumed (the Netlify/Vercel/any origin). Secured by
+  // bearer tokens (not cookies), so permissive CORS is safe — the token gates access.
+  // An explicit T3SPEND_CORS_ORIGINS env var narrows it down if needed.
   app.use(
     "/api/*",
     cors({
       origin: (origin) => {
-        const allowed = (process.env.T3SPEND_CORS_ORIGINS ?? "http://localhost:4071").split(",");
-        return allowed.includes(origin) ? origin : null;
+        if (!origin) return null; // server-to-server, no browser CORS needed
+        const explicit = (process.env.T3SPEND_CORS_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+        if (explicit.length === 0) return origin; // no explicit list = any origin works
+        return explicit.includes(origin) ? origin : null;
       },
       allowHeaders: ["authorization", "content-type"],
       allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
