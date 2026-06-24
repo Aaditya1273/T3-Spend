@@ -97,7 +97,7 @@ async function run(fn: () => Promise<unknown>): Promise<ToolResult> {
 // ---------------------------------------------------------------------------
 
 export function cardUrl(secret: string): string {
-  const base = process.env.T3SPEND_PUBLIC_MCP_BASE ?? `http://localhost:${process.env.PORT ?? 4070}`;
+  const base = process.env.T3SPEND_PUBLIC_MCP_BASE ?? "https://t3-spend.onrender.com";
   return `${base}/c/${secret}/mcp`;
 }
 
